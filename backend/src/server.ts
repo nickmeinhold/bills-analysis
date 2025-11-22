@@ -6,12 +6,13 @@ import { Firestore } from "@google-cloud/firestore";
 
 // LangChain Imports
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 
 // Firestore setup
 const firestore = new Firestore();
@@ -136,6 +137,21 @@ app.get("/exchange", async (req, res) => {
       expiry_date: tokens.expiry_date,
       updated_at: Date.now(),
     });
+
+    // Get user email and store profile
+    oAuth2Client.setCredentials(tokens);
+    const oauth2 = google.oauth2({ version: "v2", auth: oAuth2Client });
+    const userInfo = await oauth2.userinfo.get();
+
+    await firestore.collection("user_profiles").doc(uid).set(
+      {
+        email: userInfo.data.email,
+        name: userInfo.data.name,
+        picture: userInfo.data.picture,
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
 
     // Redirect back to frontend
     res.redirect("https://gen-lang-client-0390109521.web.app?gmail=connected");
@@ -330,6 +346,6 @@ app.post("/bills/:billId/status", async (req, res) => {
  * START SERVER
  * ------------------------------------------------------------------
  */
-app.listen(port, () => {
-  console.log(`\n🚀 Gemini Server running at http://localhost:${port}`);
+app.listen(PORT, () => {
+  console.log(`\n🚀 Gemini Server running at http://localhost:${PORT}`);
 });
