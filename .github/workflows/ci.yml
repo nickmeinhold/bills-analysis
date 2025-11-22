@@ -61,7 +61,7 @@ jobs:
                   gcloud run deploy bills-backend \
                   --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/bills-backend \
                   --platform managed \
-                  --region us-central1 \
+                  --region australia-southeast2 \
                   --allow-unauthenticated \
                   --timeout=600s
 
