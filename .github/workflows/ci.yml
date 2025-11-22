@@ -55,11 +55,11 @@ jobs:
                   project_id: ${{ secrets.GCP_PROJECT_ID }}
             - name: Build and push Docker image
               run: |
-                  gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/bills-backend
+                  gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/node-backend
             - name: Deploy to Cloud Run
               run: |
                   gcloud run deploy bills-backend \
-                  --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/bills-backend \
+                  --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/node-backend \
                   --platform managed \
                   --region australia-southeast2 \
                   --allow-unauthenticated \
