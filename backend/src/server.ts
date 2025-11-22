@@ -11,7 +11,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 
 // Firestore setup
 const firestore = new Firestore();
@@ -330,6 +330,6 @@ app.post("/bills/:billId/status", async (req, res) => {
  * START SERVER
  * ------------------------------------------------------------------
  */
-app.listen(PORT, () => {
-  console.log(`\n🚀 Gemini Server running at http://localhost:${PORT}`);
+app.listen(port, () => {
+  console.log(`\n🚀 Gemini Server running at http://localhost:${port}`);
 });
