@@ -1,0 +1,31 @@
+{
+  "name": "node-backend",
+  "version": "1.0.0",
+  "description": "Node.js backend using TypeScript with Gemini 3 Pro (Preview) enabled for all clients.",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/server.js",
+    "build": "tsc",
+    "dev": "ts-node src/server.ts"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^8.0.0",
+    "@google/generative-ai": "^0.24.1",
+    "@langchain/community": "^1.0.4",
+    "@langchain/core": "^1.0.6",
+    "@langchain/google-genai": "^1.0.3",
+    "@types/cors": "^2.8.19",
+    "axios": "^1.13.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "googleapis": "^166.0.0",
+    "langchain": "^1.0.6"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.17",
+    "@types/node": "^20.4.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
