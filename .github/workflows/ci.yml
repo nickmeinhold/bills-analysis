@@ -34,3 +34,54 @@ jobs:
                   if [ -f package.json ] && grep -q 'build' package.json; then
                     npm run build || echo "No build script"
                   fi
+
+    deploy-backend:
+        needs: build-and-test
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        defaults:
+            run:
+                working-directory: backend
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Set up Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+              with:
+                  project_id: ${{ secrets.GCP_PROJECT_ID }}
+                  service_account_key: ${{ secrets.GCP_SA_KEY }}
+            - name: Build and push Docker image
+              run: |
+                  gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/bills-backend
+            - name: Deploy to Cloud Run
+              run: |
+                  gcloud run deploy bills-backend \
+                    --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/bills-backend \
+                    --platform managed \
+                    --region us-central1 \
+                    --allow-unauthenticated
+
+    deploy-frontend:
+        needs: build-and-test
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        defaults:
+            run:
+                working-directory: frontend
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Install Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+            - name: Install dependencies
+              run: npm install
+            - name: Build frontend
+              run: npm run build
+            - name: Deploy to Firebase Hosting
+              uses: w9jds/firebase-action@v2.2.0
+              with:
+                  args: deploy --only hosting
+              env:
+                  FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
