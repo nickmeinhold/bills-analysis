@@ -59,10 +59,11 @@ jobs:
             - name: Deploy to Cloud Run
               run: |
                   gcloud run deploy bills-backend \
-                    --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/bills-backend \
-                    --platform managed \
-                    --region us-central1 \
-                    --allow-unauthenticated
+                  --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/bills-backend \
+                  --platform managed \
+                  --region us-central1 \
+                  --allow-unauthenticated \
+                  --timeout=600s
 
     deploy-frontend:
         needs: build-and-test
