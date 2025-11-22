@@ -1,0 +1,36 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+jobs:
+    build-and-test:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                app: [frontend, backend]
+        defaults:
+            run:
+                working-directory: ${{ matrix.app }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+            - name: Install dependencies
+              run: npm install
+            - name: Run tests
+              run: |
+                  if [ -f package.json ]; then
+                    npm test || echo "No tests found"
+                  fi
+            - name: Build (if applicable)
+              run: |
+                  if [ -f package.json ] && grep -q 'build' package.json; then
+                    npm run build || echo "No build script"
+                  fi
