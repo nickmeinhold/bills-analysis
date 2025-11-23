@@ -9,7 +9,10 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { auth, googleProvider, db } from "./firebase";
 
-const BACKEND_URL = "https://node-backend-wys33etura-km.a.run.app";
+const BACKEND_URL =
+  process.env.NODE_ENV === "development"
+    ? "http://localhost:8080"
+    : "https://node-backend-wys33etura-km.a.run.app";
 
 interface Bill {
   id: string;
@@ -97,8 +100,13 @@ function App() {
       const res = await fetch(
         `${BACKEND_URL}/gmail/bills/analyze?uid=${user.uid}`
       );
-      const data = await res.json();
-      setBills(data.bills || []);
+      if (res.headers.get("content-type")?.includes("application/json")) {
+        const data = await res.json();
+        setBills(data.bills || []);
+      } else {
+        const text = await res.text();
+        console.error("Unexpected response:", text);
+      }
     } catch (err) {
       console.error("Error analyzing bills:", err);
     }

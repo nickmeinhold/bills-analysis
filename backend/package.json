@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "build": "tsc",
-    "dev": "ts-node src/server.ts"
+    "dev": "PORT=8080 ts-node src/server.ts"
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.0.0",
