@@ -10,7 +10,7 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install --production --legacy-peer-deps
+RUN npm install --omit=dev --legacy-peer-deps
 COPY --from=builder /app/dist ./dist
 EXPOSE 8080
 CMD ["node", "dist/server.js"]

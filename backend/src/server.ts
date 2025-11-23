@@ -127,7 +127,9 @@ app.get("/exchange", async (req: Request, res: Response) => {
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
   try {
+    console.log(`[exchange] Received code: ${code}, uid: ${uid}`);
     const { tokens } = await oAuth2Client.getToken(code);
+    console.log(`[exchange] Tokens received:`, tokens);
     oAuth2Client.setCredentials(tokens);
 
     // Store tokens in Firestore under user's uid
@@ -137,11 +139,13 @@ app.get("/exchange", async (req: Request, res: Response) => {
       expiry_date: tokens.expiry_date,
       updated_at: Date.now(),
     });
+    console.log(`[exchange] Tokens saved to Firestore for uid: ${uid}`);
 
     // Get user email and store profile
     oAuth2Client.setCredentials(tokens);
     const oauth2 = google.oauth2({ version: "v2", auth: oAuth2Client });
     const userInfo = await oauth2.userinfo.get();
+    console.log(`[exchange] userInfo:`, userInfo.data);
 
     await firestore.collection("user_profiles").doc(uid).set(
       {
@@ -152,11 +156,12 @@ app.get("/exchange", async (req: Request, res: Response) => {
       },
       { merge: true }
     );
+    console.log(`[exchange] user_profiles saved for uid: ${uid}`);
 
     // Redirect back to frontend
     res.redirect("https://YOUR_FIREBASE_HOSTING_URL?gmail=connected");
   } catch (err) {
-    console.error("OAuth2 error:", err);
+    console.error("[exchange] OAuth2 error:", err);
     res.status(500).json({ error: "OAuth2 error", details: String(err) });
   }
 });
