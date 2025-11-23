@@ -3,7 +3,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { google } from "googleapis";
 import { Firestore } from "@google-cloud/firestore";
-import { PDFParse } from "pdf-parse";
+// Object imports
+import { Email } from "./Email";
+import { EmailParser } from "./EmailParser";
+import { BillAnalyzer } from "./BillAnalyzer";
 
 // LangChain Imports
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -175,32 +178,19 @@ app.get("/exchange", async (req: Request, res: Response) => {
 // AI-powered bill parsing
 app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
-
-  // Set SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-
-  const sendProgress = (data: any) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  };
-
   if (!uid) return res.status(400).json({ error: "Missing uid" });
-
-  // Get valid tokens (auto-refreshes if expired)
   const tokens = await getValidTokens(uid);
   if (!tokens) {
     return res
       .status(401)
       .json({ error: "Please reconnect your Gmail", needsReauth: true });
   }
-
   oAuth2Client.setCredentials(tokens);
-
   const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
-
   try {
-    // Search for bill-related emails
     const query =
       "subject:(bill OR invoice OR payment OR due OR statement) newer_than:30d";
     const messagesRes = await gmail.users.messages.list({
@@ -209,174 +199,29 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
       maxResults: 10,
     });
     const messages = messagesRes.data.messages || [];
-    const analyzedBills: any[] = [];
-
-    for (const msg of messages) {
-      sendProgress({ type: "status", message: "Reading..." });
-
-      const msgRes = await gmail.users.messages.get({
-        userId: "me",
-        id: msg.id!,
-        format: "full",
-      });
-
-      // Get email content
-      const headers = msgRes.data.payload?.headers || [];
-      const subject = headers.find((h) => h.name === "Subject")?.value || "";
-      const from = headers.find((h) => h.name === "From")?.value || "";
-      const date = headers.find((h) => h.name === "Date")?.value || "";
-
-      // Get body text
-      let body = "";
-      if (msgRes.data.payload?.body?.data) {
-        body = Buffer.from(msgRes.data.payload.body.data, "base64").toString();
-      } else if (msgRes.data.payload?.parts) {
-        const textPart = msgRes.data.payload.parts.find(
-          (p) => p.mimeType === "text/plain"
-        );
-        if (textPart?.body?.data) {
-          body = Buffer.from(textPart.body.data, "base64").toString();
-        }
-        // Try HTML if plain text not found
-        if (!body) {
-          const htmlPart = msgRes.data.payload.parts.find(
-            (p) => p.mimeType === "text/html"
-          );
-          if (htmlPart?.body?.data) {
-            body = Buffer.from(htmlPart.body.data, "base64").toString();
-            // Strip HTML tags for better parsing
-            body = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
-          }
-        }
-      }
-
-      // Extract PDF attachments
-      let pdfText = "";
-      if (msgRes.data.payload?.parts) {
-        for (const part of msgRes.data.payload.parts) {
-          if (part.mimeType === "application/pdf" && part.body?.attachmentId) {
-            try {
-              const attachment = await gmail.users.messages.attachments.get({
-                userId: "me",
-                messageId: msg.id!,
-                id: part.body.attachmentId,
-              });
-
-              if (attachment.data.data) {
-                const pdfBuffer = Buffer.from(attachment.data.data, "base64");
-
-                // pdf-parse v2 API
-                const parser = new PDFParse({
-                  data: new Uint8Array(pdfBuffer),
-                });
-                const textResult = await parser.getText({ first: 3 }); // first 3 pages
-                const text = textResult.text;
-                pdfText += "\n\n" + text;
-                console.log(
-                  `Extracted PDF from ${subject}:`,
-                  text.substring(0, 200)
-                );
-              }
-            } catch (pdfErr) {
-              console.error("Error extracting PDF:", pdfErr);
-            }
-          }
-        }
-      }
-
-      // Combine email body and PDF text
-      const fullContent = (body + pdfText).substring(0, 5000);
-
-      // Use Gemini to analyze the email
-      const prompt = `You are a bill analyzer. Extract bill information from this email.
-
-EMAIL DETAILS:
-From: ${from}
-Subject: ${subject}
-Email Date: ${date}
-
-CONTENT (includes email body and any PDF attachments):
-${fullContent}
-
-INSTRUCTIONS:
-1. Look for due dates in formats like: "Due Date: MM/DD/YYYY", "Payment Due: Month DD", "Due by DD/MM/YYYY", etc.
-2. Look for amounts with dollar signs, "Amount Due", "Total", "Balance", etc.
-3. Identify the company/service provider
-4. Determine the bill type based on content (electricity, internet, phone, insurance, subscription, etc.)
-5. If you see words like "paid", "payment received", "thank you for your payment", set status to "paid"
-
-Return ONLY valid JSON with this exact structure (no markdown, no explanation):
-{
-  "isBill": true/false,
-  "company": "company name or null",
-  "amount": number or null,
-  "currency": "AUD/USD/etc or null",
-  "dueDate": "YYYY-MM-DD or null",
-  "billType": "electricity/internet/phone/insurance/subscription/other/null",
-  "status": "paid/unpaid/unknown",
-  "confidence": 0-100
-}`;
-
-      try {
-        sendProgress({ type: "status", message: "Invoking LLM..." });
-
-        const aiResponse = await llm.invoke(prompt);
-        const content = aiResponse.content as string;
-
-        sendProgress({
-          type: "status",
-          message: `AI response for ${subject}: ${content.substring(0, 200)}`,
-        });
-
-        console.log("AI response for", subject, ":", content.substring(0, 200));
-
-        // Parse JSON from response
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const billData = JSON.parse(jsonMatch[0]);
-
-          if (billData.isBill && billData.confidence > 50) {
-            analyzedBills.push({
-              id: msg.id,
-              emailSubject: subject,
-              emailFrom: from,
-              emailDate: date,
-              ...billData,
-            });
-          }
-        }
-      } catch (parseErr) {
-        console.error("AI parse error for message:", msg.id, parseErr);
-      }
-    }
-
-    // Sort by due date
-    analyzedBills.sort((a, b) => {
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-    });
-
-    // Save bills to Firestore
-    const batch = firestore.batch();
-    for (const bill of analyzedBills) {
-      const billRef = firestore
-        .collection("users")
-        .doc(uid)
-        .collection("bills")
-        .doc(bill.id);
-      batch.set(
-        billRef,
-        {
-          ...bill,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-        { merge: true }
+    const billAnalyzer = new BillAnalyzer(llm);
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const email = await EmailParser.parse(gmail, msg);
+      const billData = await billAnalyzer.analyze(email);
+      res.write(
+        `event: progress\ndata: ${JSON.stringify({
+          current: i + 1,
+          total: messages.length,
+        })}\n\n`
       );
+      if (billData && billData.isBill && billData.confidence > 50) {
+        res.write(
+          `event: bill\ndata: ${JSON.stringify({
+            id: email.id,
+            emailSubject: email.subject,
+            emailFrom: email.from,
+            emailDate: email.date,
+            ...billData,
+          })}\n\n`
+        );
+      }
     }
-    await batch.commit();
-
     res.end();
   } catch (err) {
     console.error("Gmail API error:", err);
