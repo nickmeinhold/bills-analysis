@@ -84,7 +84,7 @@ const oAuth2Client = new google.auth.OAuth2(
 
 const llm = new ChatGoogleGenerativeAI({
   model: "gemini-2.5-flash",
-  temperature: 0,
+  temperature: 0.3,
   apiKey: process.env.GOOGLE_API_KEY,
   apiVersion: "v1",
 });
@@ -96,7 +96,7 @@ const llm = new ChatGoogleGenerativeAI({
  */
 
 // Health check
-app.get("/", (req: Request, res: Response) => {
+app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Gemini Agent Server is running" });
 });
 
@@ -225,17 +225,38 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
         if (textPart?.body?.data) {
           body = Buffer.from(textPart.body.data, "base64").toString();
         }
+        // Try HTML if plain text not found
+        if (!body) {
+          const htmlPart = msgRes.data.payload.parts.find(
+            (p) => p.mimeType === "text/html"
+          );
+          if (htmlPart?.body?.data) {
+            body = Buffer.from(htmlPart.body.data, "base64").toString();
+            // Strip HTML tags for better parsing
+            body = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+          }
+        }
       }
 
       // Use Gemini to analyze the email
-      const prompt = `Analyze this email and extract bill information. Return JSON only, no markdown.
+      const prompt = `You are a bill analyzer. Extract bill information from this email.
 
+EMAIL DETAILS:
 From: ${from}
 Subject: ${subject}
-Date: ${date}
-Body: ${body.substring(0, 2000)}
+Email Date: ${date}
 
-Return this exact JSON structure:
+EMAIL BODY:
+${body.substring(0, 3000)}
+
+INSTRUCTIONS:
+1. Look for due dates in formats like: "Due Date: MM/DD/YYYY", "Payment Due: Month DD", "Due by DD/MM/YYYY", etc.
+2. Look for amounts with dollar signs, "Amount Due", "Total", "Balance", etc.
+3. Identify the company/service provider
+4. Determine the bill type based on content (electricity, internet, phone, insurance, subscription, etc.)
+5. If you see words like "paid", "payment received", "thank you for your payment", set status to "paid"
+
+Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 {
   "isBill": true/false,
   "company": "company name or null",
@@ -250,6 +271,8 @@ Return this exact JSON structure:
       try {
         const aiResponse = await llm.invoke(prompt);
         const content = aiResponse.content as string;
+
+        console.log("AI response for", subject, ":", content.substring(0, 200));
 
         // Parse JSON from response
         const jsonMatch = content.match(/\{[\s\S]*\}/);
