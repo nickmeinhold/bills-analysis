@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, googleProvider, db } from "./firebase";
+import Dashboard from "./Dashboard";
 
 const BACKEND_URL =
   process.env.NODE_ENV === "development"
@@ -364,6 +365,8 @@ function App() {
               )}
             </div>
           )}
+
+          {gmailConnected && bills.length > 0 && <Dashboard bills={bills} />}
 
           <button onClick={handleLogout} className="btn secondary logout">
             Logout
