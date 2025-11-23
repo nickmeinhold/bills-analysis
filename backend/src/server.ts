@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { google } from "googleapis";
@@ -101,7 +101,7 @@ app.get("/", (req, res) => {
 });
 
 // Step 1: Redirect user to Google OAuth consent screen
-app.get("/gmail/auth", (req, res) => {
+app.get("/gmail/auth", (req: Request, res: Response) => {
   const uid = req.query.uid as string;
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
@@ -119,7 +119,7 @@ app.get("/gmail/auth", (req, res) => {
 });
 
 // Step 2: OAuth2 callback to exchange code for tokens
-app.get("/exchange", async (req, res) => {
+app.get("/exchange", async (req: Request, res: Response) => {
   const code = req.query.code as string;
   const uid = req.query.state as string;
 
@@ -154,7 +154,7 @@ app.get("/exchange", async (req, res) => {
     );
 
     // Redirect back to frontend
-    res.redirect("https://gen-lang-client-0390109521.web.app?gmail=connected");
+    res.redirect("https://YOUR_FIREBASE_HOSTING_URL?gmail=connected");
   } catch (err) {
     console.error("OAuth2 error:", err);
     res.status(500).json({ error: "OAuth2 error", details: String(err) });
@@ -162,7 +162,7 @@ app.get("/exchange", async (req, res) => {
 });
 
 // AI-powered bill parsing
-app.get("/gmail/bills/analyze", async (req, res) => {
+app.get("/gmail/bills", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
@@ -174,6 +174,10 @@ app.get("/gmail/bills/analyze", async (req, res) => {
       .json({ error: "Please reconnect your Gmail", needsReauth: true });
   }
 
+  const tokenDoc = await firestore.collection("gmail_tokens").doc(uid).get();
+  if (!tokenDoc.exists) {
+    return res.status(401).send("Authenticate first at /gmail/auth");
+  }
   oAuth2Client.setCredentials(tokens);
 
   const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
@@ -310,11 +314,13 @@ app.get("/bills", async (req, res) => {
     const bills = billsSnapshot.docs.map((doc) => doc.data());
     res.json({ bills });
   } catch (err) {
-    console.error("Error fetching bills:", err);
+    res.status(500).send("Gmail API error: " + err);
     res.status(500).json({ error: "Failed to fetch bills" });
   }
 });
 
+// Start server
+const PORT = process.env.PORT || 3000;
 // Mark bill as paid/unpaid
 app.post("/bills/:billId/status", async (req, res) => {
   const uid = req.query.uid as string;
@@ -347,5 +353,5 @@ app.post("/bills/:billId/status", async (req, res) => {
  * ------------------------------------------------------------------
  */
 app.listen(PORT, () => {
-  console.log(`\n🚀 Gemini Server running at http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
