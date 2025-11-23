@@ -59,10 +59,36 @@ function App() {
     setBills([]);
   };
 
+  // Safe OAuth popup handling
   const connectGmail = () => {
     if (!user) return;
-    window.location.href = `${BACKEND_URL}/gmail/auth?uid=${user.uid}`;
+    const popup = window.open(
+      `${BACKEND_URL}/gmail/auth?uid=${user.uid}`,
+      "oauth",
+      "width=500,height=600"
+    );
+    // Listen for message from popup
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data === "oauth-success") {
+        setGmailConnected(true);
+        if (popup) popup.close();
+        window.removeEventListener("message", handler);
+      }
+    };
+    window.addEventListener("message", handler);
   };
+  // Listen for OAuth success message on mount (in case popup sends after reload)
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data === "oauth-success") {
+        setGmailConnected(true);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
   const analyzeBills = async () => {
     if (!user) return;
