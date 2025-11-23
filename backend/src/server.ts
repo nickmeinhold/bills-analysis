@@ -284,8 +284,6 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
         }
       }
 
-      sendProgress({ type: "status", message: "Analyzing..." });
-
       // Combine email body and PDF text
       const fullContent = (body + pdfText).substring(0, 5000);
 
@@ -320,10 +318,15 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 }`;
 
       try {
+        sendProgress({ type: "status", message: "Invoking LLM..." });
+
         const aiResponse = await llm.invoke(prompt);
         const content = aiResponse.content as string;
 
-        sendProgress({ type: "status", message: "Invoked LLM..." });
+        sendProgress({
+          type: "status",
+          message: `AI response for ${subject}: ${content.substring(0, 200)}`,
+        });
 
         console.log("AI response for", subject, ":", content.substring(0, 200));
 
@@ -374,7 +377,6 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
     }
     await batch.commit();
 
-    // res.json({ bills: analyzedBills });
     res.end();
   } catch (err) {
     console.error("Gmail API error:", err);
