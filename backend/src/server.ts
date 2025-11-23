@@ -167,7 +167,7 @@ app.get("/exchange", async (req: Request, res: Response) => {
 });
 
 // AI-powered bill parsing
-app.get("/gmail/bills", async (req: Request, res: Response) => {
+app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
