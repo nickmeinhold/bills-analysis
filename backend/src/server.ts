@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { google } from "googleapis";
 import { Firestore } from "@google-cloud/firestore";
-import pdf from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 
 // LangChain Imports
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -253,11 +253,17 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
 
               if (attachment.data.data) {
                 const pdfBuffer = Buffer.from(attachment.data.data, "base64");
-                const pdfData = await pdf(pdfBuffer);
-                pdfText += "\n\n" + pdfData.text;
+
+                // pdf-parse v2 API
+                const parser = new PDFParse({
+                  data: new Uint8Array(pdfBuffer),
+                });
+                const textResult = await parser.getText({ first: 3 }); // first 3 pages
+                const text = textResult.text;
+                pdfText += "\n\n" + text;
                 console.log(
                   `Extracted PDF from ${subject}:`,
-                  pdfData.text.substring(0, 200)
+                  text.substring(0, 200)
                 );
               }
             } catch (pdfErr) {
@@ -278,8 +284,8 @@ From: ${from}
 Subject: ${subject}
 Email Date: ${date}
 
-EMAIL BODY:
-${body.substring(0, 3000)}
+CONTENT (includes email body and any PDF attachments):
+${fullContent}
 
 INSTRUCTIONS:
 1. Look for due dates in formats like: "Due Date: MM/DD/YYYY", "Payment Due: Month DD", "Due by DD/MM/YYYY", etc.
