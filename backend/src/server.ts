@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { google } from "googleapis";
 import { Firestore } from "@google-cloud/firestore";
+import pdf from "pdf-parse";
 
 // LangChain Imports
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -238,6 +239,37 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
         }
       }
 
+      // Extract PDF attachments
+      let pdfText = "";
+      if (msgRes.data.payload?.parts) {
+        for (const part of msgRes.data.payload.parts) {
+          if (part.mimeType === "application/pdf" && part.body?.attachmentId) {
+            try {
+              const attachment = await gmail.users.messages.attachments.get({
+                userId: "me",
+                messageId: msg.id!,
+                id: part.body.attachmentId,
+              });
+
+              if (attachment.data.data) {
+                const pdfBuffer = Buffer.from(attachment.data.data, "base64");
+                const pdfData = await pdf(pdfBuffer);
+                pdfText += "\n\n" + pdfData.text;
+                console.log(
+                  `Extracted PDF from ${subject}:`,
+                  pdfData.text.substring(0, 200)
+                );
+              }
+            } catch (pdfErr) {
+              console.error("Error extracting PDF:", pdfErr);
+            }
+          }
+        }
+      }
+
+      // Combine email body and PDF text
+      const fullContent = (body + pdfText).substring(0, 5000);
+
       // Use Gemini to analyze the email
       const prompt = `You are a bill analyzer. Extract bill information from this email.
 
@@ -415,5 +447,5 @@ app.post("/gmail/disconnect", async (req: Request, res: Response) => {
  * ------------------------------------------------------------------
  */
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port: ${PORT}`);
 });
