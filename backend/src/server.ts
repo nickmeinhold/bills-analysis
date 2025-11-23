@@ -319,8 +319,6 @@ app.get("/bills", async (req, res) => {
   }
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
 // Mark bill as paid/unpaid
 app.post("/bills/:billId/status", async (req, res) => {
   const uid = req.query.uid as string;
