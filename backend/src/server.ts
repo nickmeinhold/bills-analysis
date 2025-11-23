@@ -7,7 +7,6 @@ import { PDFParse } from "pdf-parse";
 
 // LangChain Imports
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 // Load environment variables
 dotenv.config();
