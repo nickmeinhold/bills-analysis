@@ -175,6 +175,16 @@ app.get("/exchange", async (req: Request, res: Response) => {
 // AI-powered bill parsing
 app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
+
+  // Set SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const sendProgress = (data: any) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
   // Get valid tokens (auto-refreshes if expired)
@@ -202,6 +212,8 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
     const analyzedBills: any[] = [];
 
     for (const msg of messages) {
+      sendProgress({ type: "status", message: "Reading..." });
+
       const msgRes = await gmail.users.messages.get({
         userId: "me",
         id: msg.id!,
@@ -272,6 +284,8 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
         }
       }
 
+      sendProgress({ type: "status", message: "Analyzing..." });
+
       // Combine email body and PDF text
       const fullContent = (body + pdfText).substring(0, 5000);
 
@@ -308,6 +322,8 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
       try {
         const aiResponse = await llm.invoke(prompt);
         const content = aiResponse.content as string;
+
+        sendProgress({ type: "status", message: "Invoked LLM..." });
 
         console.log("AI response for", subject, ":", content.substring(0, 200));
 
@@ -358,7 +374,8 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
     }
     await batch.commit();
 
-    res.json({ bills: analyzedBills });
+    // res.json({ bills: analyzedBills });
+    res.end();
   } catch (err) {
     console.error("Gmail API error:", err);
     res.status(500).json({ error: "Gmail API error", details: String(err) });

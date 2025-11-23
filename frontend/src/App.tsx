@@ -37,6 +37,12 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
+  const [progress, setProgress] = useState<{
+    message: string;
+    current?: number;
+    total?: number;
+    subject?: string;
+  } | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -130,26 +136,68 @@ function App() {
     setAnalyzing(true);
     setNeedsReauth(false);
     try {
-      const res = await fetch(
+      const eventSource = new EventSource(
         `${BACKEND_URL}/gmail/bills/analyze?uid=${user.uid}`
       );
-      if (res.headers.get("content-type")?.includes("application/json")) {
-        const data = await res.json();
 
-        if (data.needsReauth) {
-          setNeedsReauth(true);
-          setGmailConnected(false);
-        } else {
-          setBills(data.bills || []);
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        switch (data.type) {
+          case "status":
+          case "saving":
+            setProgress({ message: data.message });
+            break;
+          case "found":
+            setProgress({ message: `Found ${data.count} potential bills` });
+            break;
+          case "progress":
+          case "analyzing":
+            setProgress({
+              message: data.subject
+                ? `Analyzing: ${data.subject}`
+                : data.message,
+              current: data.current,
+              total: data.total,
+            });
+            break;
+          case "pdf":
+            setProgress({
+              message: data.message,
+              current: data.current,
+              total: data.total,
+            });
+            break;
+          case "complete":
+            setBills(data.bills || []);
+            setProgress(null);
+            eventSource.close();
+            setAnalyzing(false);
+            break;
+          case "error":
+            console.error("Analysis error:", data.error);
+            if (data.error.includes("reconnect")) {
+              setNeedsReauth(true);
+              setGmailConnected(false);
+            }
+            setProgress(null);
+            eventSource.close();
+            setAnalyzing(false);
+            break;
         }
-      } else {
-        const text = await res.text();
-        console.error("Unexpected response:", text);
-      }
+      };
+
+      eventSource.onerror = () => {
+        console.error("EventSource error");
+        eventSource.close();
+        setAnalyzing(false);
+        setProgress(null);
+      };
     } catch (err) {
       console.error("Error analyzing bills:", err);
+      setAnalyzing(false);
+      setProgress(null);
     }
-    setAnalyzing(false);
   };
 
   const togglePaid = async (billId: string, currentStatus: string) => {
@@ -250,6 +298,27 @@ function App() {
                   </button>
                 </div>
               </div>
+
+              {analyzing && progress && (
+                <div className="progress-bar">
+                  <p className="progress-message">{progress.message}</p>
+                  {progress.total && (
+                    <div className="progress-track">
+                      <div
+                        className="progress-fill"
+                        style={{
+                          width: `${
+                            (progress.current! / progress.total) * 100
+                          }%`,
+                        }}
+                      />
+                      <span className="progress-text">
+                        {progress.current} / {progress.total}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {bills.length > 0 && (
                 <>
