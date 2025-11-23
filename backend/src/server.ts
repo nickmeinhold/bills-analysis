@@ -96,7 +96,7 @@ const llm = new ChatGoogleGenerativeAI({
  */
 
 // Health check
-app.get("/", (req, res) => {
+app.get("/", (req: Request, res: Response) => {
   res.json({ status: "ok", message: "Gemini Agent Server is running" });
 });
 
@@ -123,13 +123,14 @@ app.get("/exchange", async (req: Request, res: Response) => {
   const code = req.query.code as string;
   const uid = req.query.state as string;
 
+  console.log("Exchange endpoint hit - uid:", uid);
+
   if (!code) return res.status(400).json({ error: "Missing code" });
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
   try {
-    console.log(`[exchange] Received code: ${code}, uid: ${uid}`);
+    console.log("Getting tokens...");
     const { tokens } = await oAuth2Client.getToken(code);
-    console.log(`[exchange] Tokens received:`, tokens);
     oAuth2Client.setCredentials(tokens);
 
     // Store tokens in Firestore under user's uid
@@ -139,35 +140,40 @@ app.get("/exchange", async (req: Request, res: Response) => {
       expiry_date: tokens.expiry_date,
       updated_at: Date.now(),
     });
-    console.log(`[exchange] Tokens saved to Firestore for uid: ${uid}`);
 
+    console.log("Getting user info...");
     // Get user email and store profile
     oAuth2Client.setCredentials(tokens);
     const oauth2 = google.oauth2({ version: "v2", auth: oAuth2Client });
     const userInfo = await oauth2.userinfo.get();
-    console.log(`[exchange] userInfo:`, userInfo.data);
 
-    await firestore.collection("user_profiles").doc(uid).set(
-      {
-        email: userInfo.data.email,
-        name: userInfo.data.name,
-        picture: userInfo.data.picture,
-        updatedAt: Date.now(),
-      },
-      { merge: true }
-    );
-    console.log(`[exchange] user_profiles saved for uid: ${uid}`);
+    console.log("Saving user profile:", userInfo.data.email);
+
+    const profileData: any = {
+      email: userInfo.data.email,
+      updatedAt: Date.now(),
+    };
+
+    if (userInfo.data.name) profileData.name = userInfo.data.name;
+    if (userInfo.data.picture) profileData.picture = userInfo.data.picture;
+
+    await firestore
+      .collection("user_profiles")
+      .doc(uid)
+      .set(profileData, { merge: true });
+
+    console.log("User profile saved successfully");
 
     // Redirect back to frontend
-    res.redirect("https://YOUR_FIREBASE_HOSTING_URL?gmail=connected");
+    res.redirect("https://gen-lang-client-0390109521.web.app?gmail=connected");
   } catch (err) {
-    console.error("[exchange] OAuth2 error:", err);
+    console.error("OAuth2 error:", err);
     res.status(500).json({ error: "OAuth2 error", details: String(err) });
   }
 });
 
 // AI-powered bill parsing
-app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
+app.get("/gmail/bills/analyze", async (req, res) => {
   const uid = req.query.uid as string;
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
@@ -179,10 +185,6 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
       .json({ error: "Please reconnect your Gmail", needsReauth: true });
   }
 
-  const tokenDoc = await firestore.collection("gmail_tokens").doc(uid).get();
-  if (!tokenDoc.exists) {
-    return res.status(401).send("Authenticate first at /gmail/auth");
-  }
   oAuth2Client.setCredentials(tokens);
 
   const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
@@ -319,7 +321,7 @@ app.get("/bills", async (req, res) => {
     const bills = billsSnapshot.docs.map((doc) => doc.data());
     res.json({ bills });
   } catch (err) {
-    res.status(500).send("Gmail API error: " + err);
+    console.error("Error fetching bills:", err);
     res.status(500).json({ error: "Failed to fetch bills" });
   }
 });
