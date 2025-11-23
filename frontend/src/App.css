@@ -74,6 +74,16 @@ h2 {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
+.status-bar > div {
+  display: flex;
+  gap: 8px;
+}
+
+.disconnect-btn {
+  font-size: 14px;
+  padding: 10px 16px;
+}
+
 .connected {
   color: #28a745;
   font-weight: 500;
@@ -235,4 +245,46 @@ h2 {
   border-radius: 12px;
   text-align: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.alert {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.bill-card.paid {
+  border-left-color: #28a745;
+  opacity: 0.7;
+}
+
+.paid-section {
+  margin-top: 32px;
+  opacity: 0.8;
+}
+
+.bill-actions {
+  margin: 12px 0;
+}
+
+.btn.small {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn.success {
+  background: #28a745;
+  color: white;
+}
+
+.btn.success:hover {
+  background: #218838;
+}
+
+.badge.paid-badge {
+  background: #d4edda;
+  color: #155724;
 }

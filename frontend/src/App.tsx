@@ -35,6 +35,7 @@ function App() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -42,6 +43,9 @@ function App() {
       if (user) {
         const tokenDoc = await getDoc(doc(db, "gmail_tokens", user.uid));
         setGmailConnected(tokenDoc.exists());
+        if (tokenDoc.exists()) {
+          loadSavedBills(user.uid);
+        }
       }
       setLoading(false);
     });
@@ -93,16 +97,50 @@ function App() {
     return () => window.removeEventListener("message", handler);
   }, []);
 
+  const disconnectGmail = async () => {
+    if (!user) return;
+    if (!window.confirm("Are you sure you want to disconnect Gmail?")) return;
+
+    try {
+      await fetch(`${BACKEND_URL}/gmail/disconnect?uid=${user.uid}`, {
+        method: "POST",
+      });
+      setGmailConnected(false);
+      setBills([]);
+    } catch (err) {
+      console.error("Error disconnecting Gmail:", err);
+    }
+  };
+
+  const loadSavedBills = async (uid: string) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/bills?uid=${uid}`);
+      const data = await res.json();
+      if (data.bills?.length > 0) {
+        setBills(data.bills);
+      }
+    } catch (err) {
+      console.error("Error loading saved bills:", err);
+    }
+  };
+
   const analyzeBills = async () => {
     if (!user) return;
     setAnalyzing(true);
+    setNeedsReauth(false);
     try {
       const res = await fetch(
         `${BACKEND_URL}/gmail/bills/analyze?uid=${user.uid}`
       );
       if (res.headers.get("content-type")?.includes("application/json")) {
         const data = await res.json();
-        setBills(data.bills || []);
+
+        if (data.needsReauth) {
+          setNeedsReauth(true);
+          setGmailConnected(false);
+        } else {
+          setBills(data.bills || []);
+        }
       } else {
         const text = await res.text();
         console.error("Unexpected response:", text);
@@ -111,6 +149,25 @@ function App() {
       console.error("Error analyzing bills:", err);
     }
     setAnalyzing(false);
+  };
+
+  const togglePaid = async (billId: string, currentStatus: string) => {
+    if (!user) return;
+    const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
+
+    try {
+      await fetch(`${BACKEND_URL}/bills/${billId}/status?uid=${user.uid}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      setBills(
+        bills.map((b) => (b.id === billId ? { ...b, status: newStatus } : b))
+      );
+    } catch (err) {
+      console.error("Error updating bill:", err);
+    }
   };
 
   const formatCurrency = (amount: number | null, currency: string | null) => {
@@ -127,7 +184,8 @@ function App() {
     });
   };
 
-  const getDueStatus = (dueDate: string | null) => {
+  const getDueStatus = (dueDate: string | null, status: string) => {
+    if (status === "paid") return "paid";
     if (!dueDate) return "unknown";
     const due = new Date(dueDate);
     const today = new Date();
@@ -140,9 +198,9 @@ function App() {
     return "upcoming";
   };
 
-  const totalDue = bills
-    .filter((b) => b.status !== "paid")
-    .reduce((sum, b) => sum + (b.amount || 0), 0);
+  const unpaidBills = bills.filter((b) => b.status !== "paid");
+  const paidBills = bills.filter((b) => b.status === "paid");
+  const totalDue = unpaidBills.reduce((sum, b) => sum + (b.amount || 0), 0);
 
   if (loading) return <div className="container">Loading...</div>;
 
@@ -158,6 +216,12 @@ function App() {
         <div>
           <p className="welcome">Welcome, {user.displayName}!</p>
 
+          {needsReauth && (
+            <div className="alert">
+              Your Gmail connection expired. Please reconnect.
+            </div>
+          )}
+
           {!gmailConnected ? (
             <div className="connect-section">
               <p>Connect your Gmail to scan for bills:</p>
@@ -169,21 +233,31 @@ function App() {
             <div>
               <div className="status-bar">
                 <span className="connected">✅ Gmail connected</span>
-                <button
-                  onClick={analyzeBills}
-                  className="btn primary"
-                  disabled={analyzing}
-                >
-                  {analyzing ? "Analyzing..." : "🔍 Analyze Bills"}
-                </button>
+                <div>
+                  <button
+                    onClick={analyzeBills}
+                    className="btn primary"
+                    disabled={analyzing}
+                  >
+                    {analyzing ? "Analyzing..." : "🔍 Scan for New Bills"}
+                  </button>
+                  <button
+                    onClick={disconnectGmail}
+                    className="btn secondary disconnect-btn"
+                  >
+                    Disconnect Gmail
+                  </button>
+                </div>
               </div>
 
               {bills.length > 0 && (
                 <>
                   <div className="summary">
                     <div className="summary-card">
-                      <span className="summary-label">Bills Found</span>
-                      <span className="summary-value">{bills.length}</span>
+                      <span className="summary-label">Unpaid Bills</span>
+                      <span className="summary-value">
+                        {unpaidBills.length}
+                      </span>
                     </div>
                     <div className="summary-card">
                       <span className="summary-label">Total Due</span>
@@ -193,52 +267,99 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="bills">
-                    <h2>Your Bills</h2>
-                    {bills.map((bill) => (
-                      <div
-                        key={bill.id}
-                        className={`bill-card ${getDueStatus(bill.dueDate)}`}
-                      >
-                        <div className="bill-header">
-                          <span className="bill-company">
-                            {bill.company || "Unknown"}
-                          </span>
-                          <span className={`bill-type ${bill.billType}`}>
-                            {bill.billType || "other"}
-                          </span>
-                        </div>
-                        <div className="bill-details">
-                          <div className="bill-amount">
-                            {formatCurrency(bill.amount, bill.currency)}
+                  {unpaidBills.length > 0 && (
+                    <div className="bills">
+                      <h2>Unpaid Bills</h2>
+                      {unpaidBills.map((bill) => (
+                        <div
+                          key={bill.id}
+                          className={`bill-card ${getDueStatus(
+                            bill.dueDate,
+                            bill.status
+                          )}`}
+                        >
+                          <div className="bill-header">
+                            <span className="bill-company">
+                              {bill.company || "Unknown"}
+                            </span>
+                            <span className={`bill-type ${bill.billType}`}>
+                              {bill.billType || "other"}
+                            </span>
                           </div>
-                          <div className="bill-due">
-                            Due: {formatDate(bill.dueDate)}
-                            {getDueStatus(bill.dueDate) === "overdue" && (
-                              <span className="badge overdue">Overdue</span>
-                            )}
-                            {getDueStatus(bill.dueDate) === "due-soon" && (
-                              <span className="badge due-soon">Due Soon</span>
-                            )}
+                          <div className="bill-details">
+                            <div className="bill-amount">
+                              {formatCurrency(bill.amount, bill.currency)}
+                            </div>
+                            <div className="bill-due">
+                              Due: {formatDate(bill.dueDate)}
+                              {getDueStatus(bill.dueDate, bill.status) ===
+                                "overdue" && (
+                                <span className="badge overdue">Overdue</span>
+                              )}
+                              {getDueStatus(bill.dueDate, bill.status) ===
+                                "due-soon" && (
+                                <span className="badge due-soon">Due Soon</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="bill-actions">
+                            <button
+                              onClick={() => togglePaid(bill.id, bill.status)}
+                              className="btn small success"
+                            >
+                              ✓ Mark Paid
+                            </button>
+                          </div>
+                          <div className="bill-meta">
+                            <span className="bill-subject">
+                              {bill.emailSubject}
+                            </span>
+                            <span className="bill-confidence">
+                              {bill.confidence}% confidence
+                            </span>
                           </div>
                         </div>
-                        <div className="bill-meta">
-                          <span className="bill-subject">
-                            {bill.emailSubject}
-                          </span>
-                          <span className="bill-confidence">
-                            {bill.confidence}% confidence
-                          </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {paidBills.length > 0 && (
+                    <div className="bills paid-section">
+                      <h2>Paid Bills</h2>
+                      {paidBills.map((bill) => (
+                        <div key={bill.id} className="bill-card paid">
+                          <div className="bill-header">
+                            <span className="bill-company">
+                              {bill.company || "Unknown"}
+                            </span>
+                            <span className="badge paid-badge">✓ Paid</span>
+                          </div>
+                          <div className="bill-details">
+                            <div className="bill-amount">
+                              {formatCurrency(bill.amount, bill.currency)}
+                            </div>
+                            <div className="bill-due">
+                              Was due: {formatDate(bill.dueDate)}
+                            </div>
+                          </div>
+                          <div className="bill-actions">
+                            <button
+                              onClick={() => togglePaid(bill.id, bill.status)}
+                              className="btn small secondary"
+                            >
+                              Mark Unpaid
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
 
               {bills.length === 0 && !analyzing && (
                 <p className="no-bills">
-                  Click "Analyze Bills" to scan your inbox
+                  Click "Scan for New Bills" to analyze your inbox
                 </p>
               )}
             </div>
