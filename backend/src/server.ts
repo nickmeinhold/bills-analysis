@@ -173,7 +173,7 @@ app.get("/exchange", async (req: Request, res: Response) => {
 });
 
 // AI-powered bill parsing
-app.get("/gmail/bills/analyze", async (req, res) => {
+app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
@@ -306,7 +306,7 @@ Return this exact JSON structure:
 });
 
 // Get saved bills from Firestore (fast, no Gmail API call)
-app.get("/bills", async (req, res) => {
+app.get("/bills", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
   if (!uid) return res.status(400).json({ error: "Missing uid" });
 
@@ -327,7 +327,7 @@ app.get("/bills", async (req, res) => {
 });
 
 // Mark bill as paid/unpaid
-app.post("/bills/:billId/status", async (req, res) => {
+app.post("/bills/:billId/status", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
   const { billId } = req.params;
   const { status } = req.body;
@@ -349,6 +349,40 @@ app.post("/bills/:billId/status", async (req, res) => {
   } catch (err) {
     console.error("Error updating bill:", err);
     res.status(500).json({ error: "Failed to update bill" });
+  }
+});
+
+// Disconnect Gmail - revoke access and delete tokens
+app.post("/gmail/disconnect", async (req: Request, res: Response) => {
+  const uid = req.query.uid as string;
+  if (!uid) return res.status(400).json({ error: "Missing uid" });
+
+  try {
+    // Get tokens
+    const tokenDoc = await firestore.collection("gmail_tokens").doc(uid).get();
+
+    if (tokenDoc.exists) {
+      const tokens = tokenDoc.data();
+
+      // Revoke the token with Google
+      if (tokens?.access_token) {
+        try {
+          await oAuth2Client.revokeToken(tokens.access_token);
+          console.log("Token revoked with Google");
+        } catch (err) {
+          console.error("Failed to revoke token:", err);
+        }
+      }
+
+      // Delete from Firestore
+      await firestore.collection("gmail_tokens").doc(uid).delete();
+      console.log("Token deleted from Firestore");
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error disconnecting Gmail:", err);
+    res.status(500).json({ error: "Failed to disconnect Gmail" });
   }
 });
 
