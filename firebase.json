@@ -1,0 +1,25 @@
+{
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs24"
+  },
+  "emulators": {
+    "apphosting": {
+      "port": 5002,
+      "rootDirectory": "frontend",
+      "startCommand": "npm run start"
+    },
+    "functions": {
+      "port": 5001,
+      "source": "functions"
+    },
+    "firestore": {
+      "port": 8081
+    },
+    "ui": {
+      "enabled": true
+    },
+
+    "singleProjectMode": true
+  }
+}

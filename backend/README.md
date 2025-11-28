@@ -5,7 +5,6 @@ This backend integrates Google Gemini, LangChain, and Gmail OAuth for bill detec
 ## Features
 
 - Gemini 3 Pro (Preview) agent integration
-- Google Search via SerpAPI
 - Gmail OAuth2 authentication and bill detection
 - Express REST API
 - Environment variable support via `.env`
@@ -34,7 +33,6 @@ This backend integrates Google Gemini, LangChain, and Gmail OAuth for bill detec
 
    ```env
    GOOGLE_API_KEY=your_google_api_key
-   SERP_API_KEY=your_serp_api_key
    GOOGLE_CLIENT_ID=your_google_client_id
    GOOGLE_CLIENT_SECRET=your_google_client_secret
    GOOGLE_REDIRECT_URI=https://<url>/exchange
