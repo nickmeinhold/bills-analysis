@@ -135,64 +135,72 @@ function App() {
     if (!user) return;
     setAnalyzing(true);
     setNeedsReauth(false);
+    const foundBills: Bill[] = [];
+
     try {
       const eventSource = new EventSource(
         `${BACKEND_URL}/gmail/bills/analyze?uid=${user.uid}`
       );
 
-      eventSource.onmessage = (event) => {
+      // Listen for progress events
+      eventSource.addEventListener("progress", (event: MessageEvent) => {
         const data = JSON.parse(event.data);
+        const { stage, current, total } = data;
 
-        switch (data.type) {
-          case "status":
-          case "saving":
-            setProgress({ message: data.message });
+        let message = "";
+        switch (stage) {
+          case "parsing":
+            message = "📥 Parsing emails from Gmail...";
             break;
-          case "found":
-            setProgress({ message: `Found ${data.count} potential bills` });
-            break;
-          case "progress":
           case "analyzing":
-            setProgress({
-              message: data.subject
-                ? `Analyzing: ${data.subject}`
-                : data.message,
-              current: data.current,
-              total: data.total,
-            });
-            break;
-          case "pdf":
-            setProgress({
-              message: data.message,
-              current: data.current,
-              total: data.total,
-            });
+            message = "🤖 Analyzing bills with AI...";
             break;
           case "complete":
-            setBills(data.bills || []);
-            setProgress(null);
-            eventSource.close();
-            setAnalyzing(false);
+            message = `✓ Analyzing email ${current}/${total}`;
             break;
-          case "error":
-            console.error("Analysis error:", data.error);
-            if (data.error.includes("reconnect")) {
-              setNeedsReauth(true);
-              setGmailConnected(false);
-            }
-            setProgress(null);
-            eventSource.close();
-            setAnalyzing(false);
-            break;
+          default:
+            message = `Processing ${current}/${total}...`;
         }
-      };
 
-      eventSource.onerror = () => {
-        console.error("EventSource error");
+        setProgress({
+          message,
+          current,
+          total,
+        });
+      });
+
+      // Listen for bill events
+      eventSource.addEventListener("bill", (event: MessageEvent) => {
+        const bill: Bill = JSON.parse(event.data);
+        foundBills.push(bill);
+        setBills([...foundBills]); // Update bills in real-time
+      });
+
+      eventSource.onerror = (error) => {
+        // EventSource fires onerror when stream ends naturally or on error
+        // If we received data successfully, this is likely a normal close
+        if (eventSource.readyState === EventSource.CLOSED) {
+          console.log("Analysis complete, stream closed");
+          setProgress({
+            message: `✓ Complete! Found ${foundBills.length} bills`,
+          });
+          setTimeout(() => setProgress(null), 2000);
+        } else {
+          console.error("EventSource error:", error);
+        }
         eventSource.close();
         setAnalyzing(false);
-        setProgress(null);
       };
+
+      // Safety timeout to prevent hanging
+      setTimeout(() => {
+        if (eventSource.readyState !== EventSource.CLOSED) {
+          console.warn("Analysis timeout, closing connection");
+          eventSource.close();
+          setAnalyzing(false);
+          setProgress(null);
+        }
+      }, 120000); // 2 minute timeout
     } catch (err) {
       console.error("Error analyzing bills:", err);
       setAnalyzing(false);
