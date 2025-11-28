@@ -4,12 +4,8 @@ import dotenv from "dotenv";
 import { google } from "googleapis";
 import { Firestore } from "@google-cloud/firestore";
 // Object imports
-import { Email } from "./Email";
 import { EmailParser } from "./EmailParser";
 import { BillAnalyzer } from "./BillAnalyzer";
-
-// LangChain Imports
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
 // Load environment variables
 dotenv.config();
@@ -78,19 +74,6 @@ const oAuth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI
 );
-
-/**
- * ------------------------------------------------------------------
- * AGENT SETUP
- * ------------------------------------------------------------------
- */
-
-const llm = new ChatGoogleGenerativeAI({
-  model: "gemini-2.5-flash",
-  temperature: 0.3,
-  apiKey: process.env.GOOGLE_API_KEY,
-  apiVersion: "v1",
-});
 
 /**
  * ------------------------------------------------------------------
@@ -199,17 +182,45 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
       maxResults: 10,
     });
     const messages = messagesRes.data.messages || [];
-    const billAnalyzer = new BillAnalyzer(llm);
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      const email = await EmailParser.parse(gmail, msg);
-      const billData = await billAnalyzer.analyze(email);
+    const billAnalyzer = new BillAnalyzer();
+
+    // Parse all emails in parallel first
+    res.write(
+      `event: progress\ndata: ${JSON.stringify({
+        stage: "parsing",
+        current: 0,
+        total: messages.length,
+      })}\n\n`
+    );
+
+    const emails = await Promise.all(
+      messages.map((msg) => EmailParser.parse(gmail, msg))
+    );
+
+    // Analyze emails in batch (5 concurrent)
+    res.write(
+      `event: progress\ndata: ${JSON.stringify({
+        stage: "analyzing",
+        current: 0,
+        total: emails.length,
+      })}\n\n`
+    );
+
+    const billResults = await billAnalyzer.analyzeBatch(emails, 5);
+
+    // Send results
+    for (let i = 0; i < emails.length; i++) {
+      const email = emails[i];
+      const billData = billResults[i];
+
       res.write(
         `event: progress\ndata: ${JSON.stringify({
+          stage: "complete",
           current: i + 1,
-          total: messages.length,
+          total: emails.length,
         })}\n\n`
       );
+
       if (billData && billData.isBill && billData.confidence > 50) {
         res.write(
           `event: bill\ndata: ${JSON.stringify({

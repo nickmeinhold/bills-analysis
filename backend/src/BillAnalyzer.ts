@@ -1,12 +1,37 @@
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { Email } from "./Email";
 
 export class BillAnalyzer {
-  llm: any;
-  constructor(llm: any) {
-    this.llm = llm;
+  private llm: ChatGoogleGenerativeAI;
+
+  constructor() {
+    this.llm = new ChatGoogleGenerativeAI({
+      model: "gemini-2.5-flash",
+      temperature: 0,
+      apiKey: process.env.GOOGLE_API_KEY,
+      apiVersion: "v1",
+      maxOutputTokens: 256,
+    });
   }
   async analyze(email: Email): Promise<any> {
-    const prompt = `You are a bill analyzer. Extract bill information from this email.\n\nEMAIL DETAILS:\nFrom: ${email.from}\nSubject: ${email.subject}\nEmail Date: ${email.date}\n\nCONTENT (includes email body and any PDF attachments):\n${email.fullContent}\n\nINSTRUCTIONS:\n1. Look for due dates in formats like: "Due Date: MM/DD/YYYY", "Payment Due: Month DD", "Due by DD/MM/YYYY", etc.\n2. Look for amounts with dollar signs, "Amount Due", "Total", "Balance", etc.\n3. Identify the company/service provider\n4. Determine the bill type based on content (electricity, internet, phone, insurance, subscription, etc.)\n5. If you see words like "paid", "payment received", "thank you for your payment", set status to "paid"\n\nReturn ONLY valid JSON with this exact structure (no markdown, no explanation):\n{\n  "isBill": true/false,\n  "company": "company name or null",\n  "amount": number or null,\n  "currency": "AUD/USD/etc or null",\n  "dueDate": "YYYY-MM-DD or null",\n  "billType": "electricity/internet/phone/insurance/subscription/other/null",\n  "status": "paid/unpaid/unknown",\n  "confidence": 0-100\n}`;
+    const prompt = `Extract bill info from this email. Return ONLY valid JSON (no markdown).
+
+From: ${email.from}
+Subject: ${email.subject}
+Date: ${email.date}
+Content: ${email.fullContent}
+
+JSON schema:
+{
+  "isBill": boolean,
+  "company": "string or null",
+  "amount": number or null,
+  "currency": "AUD/USD/etc or null",
+  "dueDate": "YYYY-MM-DD or null",
+  "billType": "electricity/internet/phone/insurance/subscription/other/null",
+  "status": "paid/unpaid/unknown",
+  "confidence": 0-100
+}`;
     const aiResponse = await this.llm.invoke(prompt);
     const content = aiResponse.content as string;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -14,5 +39,20 @@ export class BillAnalyzer {
       return JSON.parse(jsonMatch[0]);
     }
     return null;
+  }
+
+  async analyzeBatch(emails: Email[], concurrency: number = 5): Promise<any[]> {
+    const results: any[] = [];
+
+    // Process emails in batches to avoid overwhelming the API
+    for (let i = 0; i < emails.length; i += concurrency) {
+      const batch = emails.slice(i, i + concurrency);
+      const batchResults = await Promise.all(
+        batch.map((email) => this.analyze(email))
+      );
+      results.push(...batchResults);
+    }
+
+    return results;
   }
 }
