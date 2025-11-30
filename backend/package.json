@@ -2,6 +2,7 @@
   "name": "debt-dashboard-backend",
   "version": "1.0.0",
   "description": "Debt Dashboard backend - Node.js backend using TypeScript with Gemini 3 Pro (Preview) for bill analysis and debt tracking.",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/server.js",
@@ -10,7 +11,7 @@
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.0.0",
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.30.0",
     "@langchain/core": "^1.0.6",
     "@langchain/google-genai": "^1.0.3",
     "@types/cors": "^2.8.19",

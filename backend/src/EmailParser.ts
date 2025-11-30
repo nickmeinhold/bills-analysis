@@ -1,5 +1,5 @@
 import { PDFParse } from "pdf-parse";
-import { Email } from "./Email";
+import { Email } from "./Email.js";
 
 export class EmailParser {
   static async parse(gmail: any, msg: any): Promise<Email> {
@@ -17,12 +17,16 @@ export class EmailParser {
     if (msgRes.data.payload?.body?.data) {
       body = Buffer.from(msgRes.data.payload.body.data, "base64").toString();
     } else if (msgRes.data.payload?.parts) {
-      const textPart = msgRes.data.payload.parts.find((p: any) => p.mimeType === "text/plain");
+      const textPart = msgRes.data.payload.parts.find(
+        (p: any) => p.mimeType === "text/plain"
+      );
       if (textPart?.body?.data) {
         body = Buffer.from(textPart.body.data, "base64").toString();
       }
       if (!body) {
-        const htmlPart = msgRes.data.payload.parts.find((p: any) => p.mimeType === "text/html");
+        const htmlPart = msgRes.data.payload.parts.find(
+          (p: any) => p.mimeType === "text/html"
+        );
         if (htmlPart?.body?.data) {
           body = Buffer.from(htmlPart.body.data, "base64").toString();
           body = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");

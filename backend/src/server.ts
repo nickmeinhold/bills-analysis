@@ -4,8 +4,8 @@ import dotenv from "dotenv";
 import { google } from "googleapis";
 import { Firestore } from "@google-cloud/firestore";
 // Object imports
-import { EmailParser } from "./EmailParser";
-import { BillAnalyzer } from "./BillAnalyzer";
+import { EmailParser } from "./EmailParser.js";
+import { BillAnalyzer } from "./BillAnalyzer.js";
 
 // Load environment variables
 dotenv.config();
@@ -59,10 +59,7 @@ async function getValidTokens(uid: string) {
 // Middleware
 app.use(
   cors({
-    origin: [
-      "https://debt-dashboard-project.web.app",
-      "http://localhost:3000",
-    ],
+    origin: ["https://debt-dashboard-project.web.app", "http://localhost:3000"],
     credentials: true,
   })
 );
@@ -150,8 +147,8 @@ app.get("/exchange", async (req: Request, res: Response) => {
 
     console.log("User profile saved successfully");
 
-    // Redirect back to frontend
-    res.redirect("https://debt-dashboard-project.web.app?gmail=connected");
+    // Redirect to OAuth callback page which will close the popup
+    res.redirect("https://debt-dashboard-project.web.app/oauth-callback.html");
   } catch (err) {
     console.error("OAuth2 error:", err);
     res.status(500).json({ error: "OAuth2 error", details: String(err) });

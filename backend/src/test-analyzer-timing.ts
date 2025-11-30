@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
-import { BillAnalyzer } from "./BillAnalyzer";
-import { Email } from "./Email";
+import { BillAnalyzer } from "./BillAnalyzer.js";
+import { Email } from "./Email.js";
 
 // Load environment variables
 dotenv.config();
@@ -27,7 +27,7 @@ Please ensure payment is received by the due date to avoid late fees.
 
 Thank you for choosing PowerCorp Electric.
     `,
-    pdfText: ""
+    pdfText: "",
   });
 
   console.log("Starting BillAnalyzer timing test...\n");
@@ -47,7 +47,11 @@ Thank you for choosing PowerCorp Electric.
 
   console.log("Analysis Result:");
   console.log(JSON.stringify(result, null, 2));
-  console.log(`\n⏱️  Execution Time: ${duration.toFixed(2)}ms (${(duration / 1000).toFixed(3)}s)`);
+  console.log(
+    `\n⏱️  Execution Time: ${duration.toFixed(2)}ms (${(
+      duration / 1000
+    ).toFixed(3)}s)`
+  );
 }
 
 testAnalyzerTiming().catch(console.error);

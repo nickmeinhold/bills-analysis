@@ -1,18 +1,13 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { Email } from "./Email";
+import { GoogleGenAI } from "@google/genai";
+import { Email } from "./Email.js";
 
 export class BillAnalyzer {
-  private llm: ChatGoogleGenerativeAI;
+  private genAI: GoogleGenAI;
 
   constructor() {
-    this.llm = new ChatGoogleGenerativeAI({
-      model: "gemini-2.5-flash",
-      temperature: 0,
-      apiKey: process.env.GOOGLE_API_KEY,
-      apiVersion: "v1",
-      maxOutputTokens: 256,
-    });
+    this.genAI = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! });
   }
+
   async analyze(email: Email): Promise<any> {
     const prompt = `Extract bill info from this email. Return ONLY valid JSON (no markdown).
 
@@ -32,13 +27,30 @@ JSON schema:
   "status": "paid/unpaid/unknown",
   "confidence": 0-100
 }`;
-    const aiResponse = await this.llm.invoke(prompt);
-    const content = aiResponse.content as string;
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+
+    try {
+      const response = await this.genAI.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: prompt,
+        config: {
+          temperature: 0,
+          maxOutputTokens: 256,
+        },
+      });
+
+      const content = response.text;
+      if (!content) {
+        return null;
+      }
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+      return null;
+    } catch (error) {
+      console.error("Error analyzing email:", error);
+      return null;
     }
-    return null;
   }
 
   async analyzeBatch(emails: Email[], concurrency: number = 5): Promise<any[]> {
