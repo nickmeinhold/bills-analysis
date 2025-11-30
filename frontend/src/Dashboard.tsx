@@ -124,7 +124,7 @@ export default function Dashboard({ bills }: DashboardProps) {
 
   return (
     <div className="dashboard">
-      <h2>📊 Bill Analytics</h2>
+      <h2>📊 Debt Dashboard</h2>
 
       <div className="stats-grid">
         <div className="stat-card">

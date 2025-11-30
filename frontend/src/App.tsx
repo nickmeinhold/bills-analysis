@@ -13,7 +13,7 @@ import Dashboard from "./Dashboard";
 const BACKEND_URL =
   process.env.NODE_ENV === "development"
     ? "http://localhost:8080"
-    : "https://debt-dashboard-backend-km.a.run.app";
+    : "https://debt-dashboard-backend-249385029848.asia-northeast3.run.app";
 
 interface Bill {
   id: string;
