@@ -28,3 +28,65 @@ The build is minified and the filenames include the hashes.\
 Your app is ready to be deployed!
 
 See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+
+## Deployment to Firebase Hosting
+
+This frontend is deployed to Firebase Hosting. Follow these steps to deploy:
+
+### Prerequisites
+
+1. Install Firebase CLI (if not already installed):
+
+   ```bash
+   npm install -g firebase-tools
+   ```
+
+2. Login to Firebase:
+
+   ```bash
+   firebase login
+   ```
+
+3. Ensure you're using the correct Firebase project:
+
+   ```bash
+   firebase use debt-dashboard-project
+   ```
+
+### Deploy using the script
+
+The easiest way to deploy is using the provided deployment script:
+
+```bash
+./deploy.sh
+```
+
+This script will:
+
+- Build the React app
+- Deploy to Firebase Hosting
+- Output the deployment URL
+
+### Manual deployment
+
+If you prefer to deploy manually:
+
+```bash
+# Build the app
+npm run build
+
+# Deploy to Firebase
+firebase deploy --only hosting
+```
+
+### Deployment URL
+
+After deployment, your app will be available at:
+
+<https://debt-dashboard-project.web.app>
+
+### Configuration
+
+- Firebase project: `debt-dashboard-project`
+- Configuration file: `.firebaserc`
+- Firebase config: `src/firebase.ts`
