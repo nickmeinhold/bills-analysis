@@ -1,7 +1,7 @@
 {
-  "name": "node-backend",
+  "name": "debt-dashboard-backend",
   "version": "1.0.0",
-  "description": "Node.js backend using TypeScript with Gemini 3 Pro (Preview) enabled for all clients.",
+  "description": "Debt Dashboard backend - Node.js backend using TypeScript with Gemini 3 Pro (Preview) for bill analysis and debt tracking.",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/server.js",

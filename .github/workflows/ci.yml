@@ -55,11 +55,11 @@ jobs:
                   project_id: ${{ secrets.GCP_PROJECT_ID }}
             - name: Build and push Docker image
               run: |
-                  gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/node-backend
+                  gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/debt-dashboard-backend
             - name: Deploy to Cloud Run
               run: |
-                  gcloud run deploy node-backend \
-                  --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/node-backend \
+                  gcloud run deploy debt-dashboard-backend \
+                  --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/debt-dashboard-backend \
                   --platform managed \
                   --region australia-southeast2 \
                   --allow-unauthenticated \

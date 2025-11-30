@@ -82,7 +82,7 @@ async function sendBillReminders(_req, res) {
           dueSoonBills.length
         } bill(s) due in the next 3 days:\n\n${billList}\n\nTotal: $${totalDue.toFixed(
           2
-        )}\n\nView your bills: https://gen-lang-client-0390109521.web.app\n\nCheers,\nBill Tracker`,
+        )}\n\nView your bills: https://debt-dashboard-project.web.app\n\nCheers,\nBill Tracker`,
         html: `
           <h2>💰 Bills Due Soon</h2>
           <p>You have <strong>${
@@ -99,7 +99,7 @@ async function sendBillReminders(_req, res) {
               .join("")}
           </ul>
           <p><strong>Total: $${totalDue.toFixed(2)}</strong></p>
-          <p><a href="https://gen-lang-client-0390109521.web.app">View your bills →</a></p>
+          <p><a href="https://debt-dashboard-project.web.app">View your bills →</a></p>
         `,
       };
 

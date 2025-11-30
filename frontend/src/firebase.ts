@@ -7,12 +7,12 @@ import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBR3gToixn2EEBGqqXLKpP5ZcTwxYFrdQc",
-  authDomain: "gen-lang-client-0390109521.firebaseapp.com",
-  projectId: "gen-lang-client-0390109521",
-  storageBucket: "gen-lang-client-0390109521.firebasestorage.app",
-  messagingSenderId: "391238750818",
-  appId: "1:391238750818:web:d454e69435d04e0c4fb73b",
+  apiKey: "AIzaSyD-OfDBnxIxQoUWhCIealTwgj2Xl6-qT-Q",
+  authDomain: "debt-dashboard-project.firebaseapp.com",
+  projectId: "debt-dashboard-project",
+  storageBucket: "debt-dashboard-project.firebasestorage.app",
+  messagingSenderId: "249385029848",
+  appId: "1:249385029848:web:5f8b298b913470dcea87ad",
 };
 
 // Initialize Firebase

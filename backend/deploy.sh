@@ -2,8 +2,8 @@
 set -e
 
 # Configuration
-PROJECT_ID="gen-lang-client-0390109521"
-SERVICE_NAME="node-backend-wys33etura"
+PROJECT_ID="debt-dashboard-project"
+SERVICE_NAME="debt-dashboard-backend"
 REGION="asia-northeast3"  # km region
 
 echo "🚀 Deploying backend to Cloud Run..."

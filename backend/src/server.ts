@@ -60,7 +60,7 @@ async function getValidTokens(uid: string) {
 app.use(
   cors({
     origin: [
-      "https://gen-lang-client-0390109521.web.app",
+      "https://debt-dashboard-project.web.app",
       "http://localhost:3000",
     ],
     credentials: true,
@@ -151,7 +151,7 @@ app.get("/exchange", async (req: Request, res: Response) => {
     console.log("User profile saved successfully");
 
     // Redirect back to frontend
-    res.redirect("https://gen-lang-client-0390109521.web.app?gmail=connected");
+    res.redirect("https://debt-dashboard-project.web.app?gmail=connected");
   } catch (err) {
     console.error("OAuth2 error:", err);
     res.status(500).json({ error: "OAuth2 error", details: String(err) });

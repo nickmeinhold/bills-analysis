@@ -2,7 +2,7 @@
 set -e
 
 echo "🚀 Deploying frontend to Firebase Hosting..."
-echo "Project: gen-lang-client-0390109521"
+echo "Project: debt-dashboard-project"
 echo ""
 
 # Build the React app
@@ -15,4 +15,4 @@ firebase deploy --only hosting
 
 echo ""
 echo "✅ Frontend deployed successfully!"
-echo "URL: https://gen-lang-client-0390109521.web.app"
+echo "URL: https://debt-dashboard-project.web.app"

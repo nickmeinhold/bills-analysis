@@ -1,6 +1,6 @@
-# Gemini Agent Node Backend
+# Debt Dashboard Backend
 
-This backend integrates Google Gemini, LangChain, and Gmail OAuth for bill detection. It is containerized for deployment to Google Cloud Run.
+This backend integrates Google Gemini, LangChain, and Gmail OAuth for bill detection and debt tracking. It is containerized for deployment to Google Cloud Run.
 
 ## Features
 
@@ -12,7 +12,7 @@ This backend integrates Google Gemini, LangChain, and Gmail OAuth for bill detec
 
 ## Endpoints
 
-<url> = eg. node-backend-wys33etura-km.a.run.app
+<url> = eg. debt-dashboard-backend-wys33etura-km.a.run.app
 
 - `GET /` — Health check
 - `GET /gmail/auth` — Start Gmail OAuth flow
@@ -62,14 +62,14 @@ This backend integrates Google Gemini, LangChain, and Gmail OAuth for bill detec
 1. Build and push Docker image:
 
    ```sh
-   gcloud builds submit --tag gcr.io/<PROJECT_ID>/node-backend .
+   gcloud builds submit --tag gcr.io/<PROJECT_ID>/debt-dashboard-backend .
    ```
 
 2. Deploy to Cloud Run (replace with your keys):
 
    ```sh
-   gcloud run deploy node-backend \
-     --image gcr.io/<PROJECT_ID>/node-backend \
+   gcloud run deploy debt-dashboard-backend \
+     --image gcr.io/<PROJECT_ID>/debt-dashboard-backend \
      --platform managed \
      --region <REGION> \
      --allow-unauthenticated \
