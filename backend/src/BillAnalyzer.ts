@@ -30,7 +30,7 @@ JSON schema:
 
     try {
       const response = await this.genAI.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash-lite",
         contents: prompt,
         config: {
           temperature: 0,
