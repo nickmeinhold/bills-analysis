@@ -158,9 +158,7 @@ app.get("/exchange", async (req: Request, res: Response) => {
 // AI-powered bill parsing
 app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
+
   if (!uid) return res.status(400).json({ error: "Missing uid" });
   const tokens = await getValidTokens(uid);
   if (!tokens) {
@@ -168,8 +166,14 @@ app.get("/gmail/bills/analyze", async (req: Request, res: Response) => {
       .status(401)
       .json({ error: "Please reconnect your Gmail", needsReauth: true });
   }
+
   oAuth2Client.setCredentials(tokens);
   const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
   try {
     const query =
       "subject:(bill OR invoice OR payment OR due OR statement) newer_than:30d";
