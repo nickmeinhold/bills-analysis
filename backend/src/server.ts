@@ -80,7 +80,7 @@ const oAuth2Client = new google.auth.OAuth2(
 
 // Health check
 app.get("/", (req, res) => {
-  res.json({ status: "ok", message: "Gemini Agent Server is running" });
+  res.json({ status: "ok", message: "Debt Dashboard Server is running" });
 });
 
 // Step 1: Redirect user to Google OAuth consent screen
