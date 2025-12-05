@@ -257,6 +257,13 @@ function App() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Client-side file size validation (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        setProgress({ message: "❌ File too large. Maximum size is 10MB." });
+        setTimeout(() => setProgress(null), 3000);
+        e.target.value = "";
+        return;
+      }
       uploadStatement(file);
       e.target.value = ""; // Reset input
     }

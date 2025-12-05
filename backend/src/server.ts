@@ -1,7 +1,7 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import multer from "multer";
+import multer, { MulterError } from "multer";
 import { PDFParse } from "pdf-parse";
 import { google } from "googleapis";
 import { Firestore } from "@google-cloud/firestore";
@@ -33,6 +33,11 @@ const PORT = process.env.PORT || 3000;
 
 // Firestore setup
 const firestore = new Firestore();
+
+// Helper: Validate Firebase UID format (alphanumeric, 20-128 chars)
+function isValidUid(uid: string): boolean {
+  return typeof uid === "string" && /^[a-zA-Z0-9]{20,128}$/.test(uid);
+}
 
 // Helper: Get valid tokens (refreshes if expired)
 async function getValidTokens(uid: string) {
@@ -434,7 +439,14 @@ app.post(
     const uid = req.query.uid as string;
 
     if (!uid) return res.status(400).json({ error: "Missing uid" });
+    if (!isValidUid(uid)) return res.status(400).json({ error: "Invalid uid format" });
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    // Validate PDF magic number (%PDF-)
+    const pdfMagic = req.file.buffer.subarray(0, 5).toString("ascii");
+    if (!pdfMagic.startsWith("%PDF-")) {
+      return res.status(400).json({ error: "Invalid PDF file" });
+    }
 
     try {
       // Extract text from PDF
@@ -600,6 +612,21 @@ app.post("/gmail/disconnect", async (req: Request, res: Response) => {
     console.error("Error disconnecting Gmail:", err);
     res.status(500).json({ error: "Failed to disconnect Gmail" });
   }
+});
+
+// Error handling middleware for multer and general errors
+app.use((err: Error, _req: Request, res: Response, _next: express.NextFunction) => {
+  if (err instanceof MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "File too large. Maximum size is 10MB." });
+    }
+    return res.status(400).json({ error: `Upload error: ${err.message}` });
+  }
+  if (err.message === "Only PDF files are allowed") {
+    return res.status(400).json({ error: err.message });
+  }
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
 });
 
 /**
