@@ -6,6 +6,8 @@ import { Firestore } from "@google-cloud/firestore";
 // Object imports
 import { EmailParser } from "./EmailParser.js";
 import { BillAnalyzer } from "./BillAnalyzer.js";
+import { StatementAnalyzer, Transaction } from "./StatementAnalyzer.js";
+import { BillMatcher, Bill } from "./BillMatcher.js";
 
 // Load environment variables
 dotenv.config();
@@ -285,6 +287,148 @@ app.post("/bills/:billId/status", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Error updating bill:", err);
     res.status(500).json({ error: "Failed to update bill" });
+  }
+});
+
+// AI-powered bank statement parsing
+app.get("/gmail/statements/analyze", async (req: Request, res: Response) => {
+  const uid = req.query.uid as string;
+
+  if (!uid) return res.status(400).json({ error: "Missing uid" });
+  const tokens = await getValidTokens(uid);
+  if (!tokens) {
+    return res
+      .status(401)
+      .json({ error: "Please reconnect your Gmail", needsReauth: true });
+  }
+
+  oAuth2Client.setCredentials(tokens);
+  const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
+
+  try {
+    // Search for bank statement emails
+    const query =
+      'from:(statements@ OR noreply@ OR alerts@) subject:(statement OR transaction OR "account summary") newer_than:60d';
+    const messagesRes = await gmail.users.messages.list({
+      userId: "me",
+      q: query,
+      maxResults: 20,
+    });
+    const messages = messagesRes.data.messages || [];
+
+    if (messages.length === 0) {
+      return res.json({ transactions: [], matches: [], message: "No statement emails found" });
+    }
+
+    // Parse emails
+    const emails = await Promise.all(
+      messages.map((msg) => EmailParser.parse(gmail, msg))
+    );
+
+    // Analyze statements with Gemini
+    const statementAnalyzer = new StatementAnalyzer();
+    const results = await statementAnalyzer.analyzeBatch(emails, 3);
+
+    // Collect all transactions
+    const allTransactions: (Transaction & { sourceEmailId: string; sourceEmailDate: string })[] = [];
+    for (const result of results) {
+      for (const tx of result.transactions) {
+        allTransactions.push({
+          ...tx,
+          sourceEmailId: result.email.id,
+          sourceEmailDate: result.email.date,
+        });
+      }
+    }
+
+    // Get unpaid bills for matching
+    const billsSnapshot = await firestore
+      .collection("users")
+      .doc(uid)
+      .collection("bills")
+      .where("status", "!=", "paid")
+      .get();
+
+    const bills: Bill[] = billsSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Bill[];
+
+    // Match transactions to bills
+    const billMatcher = new BillMatcher();
+    const matches = billMatcher.matchTransactionsToBills(allTransactions, bills);
+
+    // Store transactions in Firestore
+    const batch = firestore.batch();
+    for (const tx of allTransactions) {
+      const txId = `${tx.sourceEmailId}_${tx.date}_${tx.amount}`;
+      const txRef = firestore
+        .collection("users")
+        .doc(uid)
+        .collection("transactions")
+        .doc(txId);
+
+      // Check if this transaction matches a bill
+      const match = matches.find(
+        (m) => m.transactionDate === tx.date && m.transactionAmount === tx.amount
+      );
+
+      batch.set(txRef, {
+        ...tx,
+        id: txId,
+        matchedBillId: match?.billId || null,
+        createdAt: Date.now(),
+      }, { merge: true });
+    }
+    await batch.commit();
+
+    // Auto-mark matched bills as paid
+    for (const match of matches) {
+      if (match.confidence >= 70) {
+        await firestore
+          .collection("users")
+          .doc(uid)
+          .collection("bills")
+          .doc(match.billId)
+          .update({
+            status: "paid",
+            paidDate: match.transactionDate,
+            matchedTransactionId: `${match.transactionDate}_${match.transactionAmount}`,
+            updatedAt: Date.now(),
+          });
+      }
+    }
+
+    res.json({
+      transactions: allTransactions,
+      matches,
+      emailsProcessed: emails.length,
+    });
+  } catch (err) {
+    console.error("Statement analysis error:", err);
+    res.status(500).json({ error: "Failed to analyze statements", details: String(err) });
+  }
+});
+
+// Get all transactions for user
+app.get("/transactions", async (req: Request, res: Response) => {
+  const uid = req.query.uid as string;
+  if (!uid) return res.status(400).json({ error: "Missing uid" });
+
+  try {
+    const transactionsSnapshot = await firestore
+      .collection("users")
+      .doc(uid)
+      .collection("transactions")
+      .orderBy("date", "desc")
+      .limit(100)
+      .get();
+
+    const transactions = transactionsSnapshot.docs.map((doc) => doc.data());
+    res.json({ transactions });
+  } catch (err) {
+    console.error("Error fetching transactions:", err);
+    res.status(500).json({ error: "Failed to fetch transactions" });
   }
 });
 
