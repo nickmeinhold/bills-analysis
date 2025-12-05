@@ -43,6 +43,7 @@ function App() {
     total?: number;
     subject?: string;
   } | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -208,6 +209,59 @@ function App() {
     }
   };
 
+  const uploadStatement = async (file: File) => {
+    if (!user) return;
+    setUploading(true);
+    setProgress({ message: "📄 Uploading PDF..." });
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      setProgress({ message: "🤖 Analyzing statement with AI..." });
+
+      const res = await fetch(
+        `${BACKEND_URL}/statements/upload?uid=${user.uid}`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      const { transactions, matches } = data;
+      setProgress({
+        message: `✓ Found ${transactions.length} transactions, ${matches.length} matched to bills`,
+      });
+
+      // Reload bills to reflect any auto-paid updates
+      if (matches.length > 0) {
+        await loadSavedBills(user.uid);
+      }
+
+      setTimeout(() => setProgress(null), 3000);
+    } catch (err) {
+      console.error("Upload error:", err);
+      setProgress({ message: `❌ ${err instanceof Error ? err.message : "Upload failed"}` });
+      setTimeout(() => setProgress(null), 3000);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      uploadStatement(file);
+      e.target.value = ""; // Reset input
+    }
+  };
+
   const togglePaid = async (billId: string, currentStatus: string) => {
     if (!user) return;
     const newStatus = currentStatus === "paid" ? "unpaid" : "paid";
@@ -294,10 +348,20 @@ function App() {
                   <button
                     onClick={analyzeBills}
                     className="btn primary"
-                    disabled={analyzing}
+                    disabled={analyzing || uploading}
                   >
                     {analyzing ? "Analyzing..." : "🔍 Scan for New Bills"}
                   </button>
+                  <label className="btn primary upload-btn">
+                    {uploading ? "Uploading..." : "📄 Upload Statement"}
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileSelect}
+                      disabled={uploading || analyzing}
+                      hidden
+                    />
+                  </label>
                   <button
                     onClick={disconnectGmail}
                     className="btn secondary disconnect-btn"
@@ -307,7 +371,7 @@ function App() {
                 </div>
               </div>
 
-              {analyzing && progress && (
+              {(analyzing || uploading) && progress && (
                 <div className="progress-bar">
                   <p className="progress-message">{progress.message}</p>
                   {progress.total && (

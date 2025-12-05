@@ -1,13 +1,29 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import multer from "multer";
+import { PDFParse } from "pdf-parse";
 import { google } from "googleapis";
 import { Firestore } from "@google-cloud/firestore";
 // Object imports
+import { Email } from "./Email.js";
 import { EmailParser } from "./EmailParser.js";
 import { BillAnalyzer } from "./BillAnalyzer.js";
 import { StatementAnalyzer, Transaction } from "./StatementAnalyzer.js";
 import { BillMatcher, Bill } from "./BillMatcher.js";
+
+// Configure multer for PDF uploads (memory storage, 10MB limit)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf") {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF files are allowed"));
+    }
+  },
+});
 
 // Load environment variables
 dotenv.config();
@@ -409,6 +425,126 @@ app.get("/gmail/statements/analyze", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to analyze statements", details: String(err) });
   }
 });
+
+// Upload PDF bank statement for analysis
+app.post(
+  "/statements/upload",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const uid = req.query.uid as string;
+
+    if (!uid) return res.status(400).json({ error: "Missing uid" });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    try {
+      // Extract text from PDF
+      const parser = new PDFParse({ data: new Uint8Array(req.file.buffer) });
+      const pdfData = await parser.getText();
+      const pdfText = pdfData.text;
+
+      if (!pdfText || pdfText.trim().length === 0) {
+        return res.status(400).json({ error: "Could not extract text from PDF" });
+      }
+
+      // Create an Email-like object for the analyzer
+      const statementDoc = new Email({
+        id: `upload_${Date.now()}`,
+        subject: req.file.originalname,
+        from: "PDF Upload",
+        date: new Date().toISOString(),
+        body: "",
+        pdfText: pdfText,
+      });
+
+      // Analyze with Gemini
+      const statementAnalyzer = new StatementAnalyzer();
+      const transactions = await statementAnalyzer.analyze(statementDoc);
+
+      if (transactions.length === 0) {
+        return res.json({
+          transactions: [],
+          matches: [],
+          message: "No transactions found in PDF",
+        });
+      }
+
+      // Get unpaid bills for matching
+      const billsSnapshot = await firestore
+        .collection("users")
+        .doc(uid)
+        .collection("bills")
+        .where("status", "!=", "paid")
+        .get();
+
+      const bills: Bill[] = billsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Bill[];
+
+      // Match transactions to bills
+      const billMatcher = new BillMatcher();
+      const allTransactions = transactions.map((tx) => ({
+        ...tx,
+        sourceEmailId: statementDoc.id,
+        sourceEmailDate: statementDoc.date,
+      }));
+      const matches = billMatcher.matchTransactionsToBills(allTransactions, bills);
+
+      // Store transactions in Firestore
+      const batch = firestore.batch();
+      for (const tx of allTransactions) {
+        const txId = `${tx.sourceEmailId}_${tx.date}_${tx.amount}`;
+        const txRef = firestore
+          .collection("users")
+          .doc(uid)
+          .collection("transactions")
+          .doc(txId);
+
+        const match = matches.find(
+          (m) => m.transactionDate === tx.date && m.transactionAmount === tx.amount
+        );
+
+        batch.set(
+          txRef,
+          {
+            ...tx,
+            id: txId,
+            matchedBillId: match?.billId || null,
+            createdAt: Date.now(),
+          },
+          { merge: true }
+        );
+      }
+      await batch.commit();
+
+      // Auto-mark matched bills as paid (confidence >= 70%)
+      for (const match of matches) {
+        if (match.confidence >= 70) {
+          await firestore
+            .collection("users")
+            .doc(uid)
+            .collection("bills")
+            .doc(match.billId)
+            .update({
+              status: "paid",
+              paidDate: match.transactionDate,
+              matchedTransactionId: `${match.transactionDate}_${match.transactionAmount}`,
+              updatedAt: Date.now(),
+            });
+        }
+      }
+
+      res.json({
+        transactions: allTransactions,
+        matches,
+        filename: req.file.originalname,
+      });
+    } catch (err) {
+      console.error("PDF upload error:", err);
+      res.status(500).json({ error: "Failed to process PDF", details: String(err) });
+    }
+  }
+);
 
 // Get all transactions for user
 app.get("/transactions", async (req: Request, res: Response) => {

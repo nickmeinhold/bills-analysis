@@ -124,6 +124,13 @@ h2 {
   margin-left: 1rem;
 }
 
+.upload-btn {
+  margin-left: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .logout {
   margin-top: 2rem;
   background: rgba(255, 255, 255, 0.2);
