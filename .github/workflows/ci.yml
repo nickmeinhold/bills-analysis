@@ -1,83 +1,152 @@
 name: CI
 
 on:
-    push:
-        branches: [main]
-    pull_request:
-        branches: [main]
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-    test:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                app: [frontend, backend]
-        defaults:
-            run:
-                working-directory: ${{ matrix.app }}
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-            - run: npm install
-            - run: npm test
-              env:
-                  CI: true
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [frontend, backend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm test
+        env:
+          CI: true
 
-    deploy-backend:
-        needs: test
-        runs-on: ubuntu-latest
-        if: github.event_name == 'push'
-        defaults:
-            run:
-                working-directory: backend
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-            - name: Authenticate to Google Cloud
-              uses: google-github-actions/auth@v2
-              with:
-                  credentials_json: ${{ secrets.GCP_SA_KEY }}
-            - name: Set up Cloud SDK
-              uses: google-github-actions/setup-gcloud@v2
-              with:
-                  project_id: ${{ secrets.GCP_PROJECT_ID }}
-            - name: Deploy to Cloud Run
-              run: |
-                  gcloud run deploy debt-dashboard-backend \
-                    --source . \
-                    --platform managed \
-                    --region asia-northeast3 \
-                    --project ${{ secrets.GCP_PROJECT_ID }} \
-                    --allow-unauthenticated \
-                    --port 8080 \
-                    --memory 512Mi \
-                    --timeout 300s
+  claude-code-review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
 
-    deploy-frontend:
-        needs: test
-        runs-on: ubuntu-latest
-        if: github.event_name == 'push'
-        defaults:
-            run:
-                working-directory: frontend
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-            - name: Install Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-            - name: Install dependencies
-              run: npm install
-            - name: Build frontend
-              run: npm run build
-            - name: Deploy to Firebase Hosting
-              uses: FirebaseExtended/action-hosting-deploy@v0
-              with:
-                  repoToken: ${{ secrets.GITHUB_TOKEN }}
-                  firebaseServiceAccount: ${{ secrets.GCP_SA_KEY }}
-                  channelId: live
-                  projectId: debt-dashboard-project
-                  entryPoint: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Action
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: true
+          prompt: |
+            You are reviewing PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            ## Project Context
+            A debt dashboard application with:
+            - **Frontend**: React + TypeScript, hosted on Firebase
+            - **Backend**: Node.js API on Cloud Run (Docker)
+
+            ## Review Process
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see the changes
+            2. Read relevant files for full context when needed
+            3. Leave inline comments on specific lines using `gh pr review --comment` with `-F` for the body
+            4. Submit a final review verdict
+
+            ## Review Criteria
+
+            **Must Fix (request changes):**
+            - Security vulnerabilities (injection, auth bypass, secrets in code)
+            - Data loss or corruption risks
+            - Breaking changes to APIs without migration path
+            - Unhandled errors that would crash the service
+
+            **Should Fix (comment):**
+            - Missing error handling for edge cases
+            - Performance issues (N+1 queries, unnecessary re-renders)
+            - Type safety gaps (any types, missing null checks)
+            - Missing input validation
+
+            **Consider (optional suggestions):**
+            - Code style and readability improvements
+            - Minor refactoring opportunities
+            - Test coverage gaps
+
+            ## Review Guidelines
+            - Be specific: reference file names and line numbers
+            - Explain *why* something is an issue, not just *what*
+            - Suggest concrete fixes when possible
+            - Acknowledge what's done well (briefly)
+            - Don't nitpick formatting if there's a linter
+
+            ## Submit Review
+            After analysis, submit your review:
+            - `gh pr review ${{ github.event.pull_request.number }} --approve -b "summary"` — No blocking issues
+            - `gh pr review ${{ github.event.pull_request.number }} --request-changes -b "summary"` — Has "Must Fix" issues
+            - `gh pr review ${{ github.event.pull_request.number }} --comment -b "summary"` — Has suggestions but nothing blocking
+          claude_args: |
+            --allowedTools "Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"\
+
+  deploy-backend:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy debt-dashboard-backend \
+            --source . \
+            --platform managed \
+            --region asia-northeast3 \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 512Mi \
+            --timeout 300s
+
+  deploy-frontend:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm install
+      - name: Build frontend
+        run: npm run build
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.GCP_SA_KEY }}
+          channelId: live
+          projectId: debt-dashboard-project
+          entryPoint: ./frontend
