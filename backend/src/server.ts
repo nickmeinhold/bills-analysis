@@ -1,13 +1,29 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import multer, { MulterError } from "multer";
+import { PDFParse } from "pdf-parse";
 import { google } from "googleapis";
 import { Firestore } from "@google-cloud/firestore";
 // Object imports
+import { Email } from "./Email.js";
 import { EmailParser } from "./EmailParser.js";
 import { BillAnalyzer } from "./BillAnalyzer.js";
 import { StatementAnalyzer, Transaction } from "./StatementAnalyzer.js";
 import { BillMatcher, Bill } from "./BillMatcher.js";
+
+// Configure multer for PDF uploads (memory storage, 10MB limit)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf") {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF files are allowed"));
+    }
+  },
+});
 
 // Load environment variables
 dotenv.config();
@@ -17,6 +33,11 @@ const PORT = process.env.PORT || 3000;
 
 // Firestore setup
 const firestore = new Firestore();
+
+// Helper: Validate Firebase UID format (alphanumeric, 20-128 chars)
+function isValidUid(uid: string): boolean {
+  return typeof uid === "string" && /^[a-zA-Z0-9]{20,128}$/.test(uid);
+}
 
 // Helper: Get valid tokens (refreshes if expired)
 async function getValidTokens(uid: string) {
@@ -410,6 +431,142 @@ app.get("/gmail/statements/analyze", async (req: Request, res: Response) => {
   }
 });
 
+// Upload PDF bank statement for analysis
+app.post(
+  "/statements/upload",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const uid = req.query.uid as string;
+
+    if (!uid) return res.status(400).json({ error: "Missing uid" });
+    if (!isValidUid(uid)) return res.status(400).json({ error: "Invalid uid format" });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    // Validate PDF magic number (%PDF-)
+    const pdfMagic = req.file.buffer.subarray(0, 5).toString("ascii");
+    if (!pdfMagic.startsWith("%PDF-")) {
+      return res.status(400).json({ error: "Invalid PDF file" });
+    }
+
+    try {
+      // Extract text from PDF
+      const parser = new PDFParse({ data: new Uint8Array(req.file.buffer) });
+      const pdfData = await parser.getText();
+      const pdfText = pdfData.text;
+
+      if (!pdfText || pdfText.trim().length === 0) {
+        return res.status(400).json({ error: "Could not extract text from PDF" });
+      }
+
+      // Create an Email-like object for the analyzer
+      const uploadId = `upload_${crypto.randomUUID()}`;
+      const statementDoc = new Email({
+        id: uploadId,
+        subject: req.file.originalname,
+        from: "PDF Upload",
+        date: new Date().toISOString(),
+        body: "",
+        pdfText: pdfText,
+      });
+
+      // Analyze with Gemini
+      const statementAnalyzer = new StatementAnalyzer();
+      const transactions = await statementAnalyzer.analyze(statementDoc);
+
+      if (transactions.length === 0) {
+        return res.json({
+          transactions: [],
+          matches: [],
+          message: "No transactions found in PDF",
+        });
+      }
+
+      // Get unpaid bills for matching
+      const billsSnapshot = await firestore
+        .collection("users")
+        .doc(uid)
+        .collection("bills")
+        .where("status", "!=", "paid")
+        .get();
+
+      const bills: Bill[] = billsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Bill[];
+
+      // Match transactions to bills
+      const billMatcher = new BillMatcher();
+      const allTransactions = transactions.map((tx) => ({
+        ...tx,
+        sourceEmailId: statementDoc.id,
+        sourceEmailDate: statementDoc.date,
+      }));
+      const matches = billMatcher.matchTransactionsToBills(allTransactions, bills);
+
+      // Store transactions in Firestore
+      const batch = firestore.batch();
+      for (const tx of allTransactions) {
+        // Use UUID to avoid collisions when same date/amount appears multiple times
+        const txId = crypto.randomUUID();
+        const txRef = firestore
+          .collection("users")
+          .doc(uid)
+          .collection("transactions")
+          .doc(txId);
+
+        const match = matches.find(
+          (m) => m.transactionDate === tx.date && m.transactionAmount === tx.amount
+        );
+
+        batch.set(
+          txRef,
+          {
+            ...tx,
+            id: txId,
+            matchedBillId: match?.billId || null,
+            createdAt: Date.now(),
+          },
+          { merge: true }
+        );
+      }
+      await batch.commit();
+
+      // Auto-mark matched bills as paid (confidence >= 70%)
+      const autoMarkedBills: string[] = [];
+      for (const match of matches) {
+        if (match.confidence >= 70) {
+          await firestore
+            .collection("users")
+            .doc(uid)
+            .collection("bills")
+            .doc(match.billId)
+            .update({
+              status: "paid",
+              paidDate: match.transactionDate,
+              matchedTransactionId: `${match.transactionDate}_${match.transactionAmount}`,
+              autoMatched: true,
+              matchConfidence: match.confidence,
+              updatedAt: Date.now(),
+            });
+          autoMarkedBills.push(match.billId);
+        }
+      }
+      if (autoMarkedBills.length > 0) {
+        console.log(`Auto-marked ${autoMarkedBills.length} bills as paid for user ${uid}:`, autoMarkedBills);
+      }
+
+      res.json({
+        transactions: allTransactions,
+        matches,
+        filename: req.file.originalname,
+      });
+    } catch (err) {
+      console.error("PDF upload error:", err);
+      res.status(500).json({ error: "Failed to process PDF", details: String(err) });
+    }
+  }
+);
+
 // Get all transactions for user
 app.get("/transactions", async (req: Request, res: Response) => {
   const uid = req.query.uid as string;
@@ -464,6 +621,21 @@ app.post("/gmail/disconnect", async (req: Request, res: Response) => {
     console.error("Error disconnecting Gmail:", err);
     res.status(500).json({ error: "Failed to disconnect Gmail" });
   }
+});
+
+// Error handling middleware for multer and general errors
+app.use((err: Error, _req: Request, res: Response, _next: express.NextFunction) => {
+  if (err instanceof MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "File too large. Maximum size is 10MB." });
+    }
+    return res.status(400).json({ error: `Upload error: ${err.message}` });
+  }
+  if (err.message === "Only PDF files are allowed") {
+    return res.status(400).json({ error: err.message });
+  }
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
 });
 
 /**

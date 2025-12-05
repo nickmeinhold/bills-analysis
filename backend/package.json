@@ -17,12 +17,14 @@
     "@langchain/core": "^1.0.6",
     "@langchain/google-genai": "^1.0.3",
     "@types/cors": "^2.8.19",
+    "@types/multer": "^2.0.0",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "googleapis": "^166.0.0",
     "langchain": "^1.0.6",
+    "multer": "^2.0.2",
     "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
