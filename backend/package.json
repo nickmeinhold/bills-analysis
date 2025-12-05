@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node dist/server.js",
     "build": "tsc",
-    "dev": "PORT=8080 tsx src/server.ts"
+    "dev": "PORT=8080 tsx src/server.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.0.0",
@@ -28,6 +30,7 @@
     "@types/node": "^20.4.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "vitest": "^4.0.15"
   }
 }
