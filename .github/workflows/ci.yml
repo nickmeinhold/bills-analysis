@@ -57,7 +57,14 @@ jobs:
             ## Review Process
             1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see the changes
             2. Read relevant files for full context when needed
-            3. Leave inline comments on specific lines using `gh pr review --comment` with `-F` for the body
+            3. For inline comments on specific lines, use:
+               ```
+               gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+                 -f body="Your comment" \
+                 -f path="path/to/file.ts" \
+                 -F line=42 \
+                 -f commit_id="$(gh pr view ${{ github.event.pull_request.number }} --json headRefOid -q .headRefOid)"
+               ```
             4. Submit a final review verdict
 
             ## Review Criteria
@@ -92,7 +99,7 @@ jobs:
             - `gh pr review ${{ github.event.pull_request.number }} --request-changes -b "summary"` — Has "Must Fix" issues
             - `gh pr review ${{ github.event.pull_request.number }} --comment -b "summary"` — Has suggestions but nothing blocking
           claude_args: |
-            --allowedTools "Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"\
+            --allowedTools "Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*),Read,Glob,Grep"
 
   deploy-backend:
     needs: test
