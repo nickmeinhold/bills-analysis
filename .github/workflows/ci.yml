@@ -57,15 +57,15 @@ jobs:
             ## Review Process
             1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see the changes
             2. Read relevant files for full context when needed
-            3. For inline comments on specific lines, use:
+            3. Collect all inline comments, then submit as a single review with:
                ```
-               gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
-                 -f body="Your comment" \
-                 -f path="path/to/file.ts" \
-                 -F line=42 \
-                 -f commit_id="$(gh pr view ${{ github.event.pull_request.number }} --json headRefOid -q .headRefOid)"
+               gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+                 -f commit_id="$(gh pr view ${{ github.event.pull_request.number }} --json headRefOid -q .headRefOid)" \
+                 -f event="REQUEST_CHANGES" \
+                 -f body="Summary of review" \
+                 -f comments='[{"path":"file.ts","line":10,"body":"Comment 1"},{"path":"file.ts","line":20,"body":"Comment 2"}]'
                ```
-            4. Submit a final review verdict
+               Use event="APPROVE" if no issues, "REQUEST_CHANGES" for blocking issues, "COMMENT" for suggestions only.
 
             ## Review Criteria
 
@@ -94,10 +94,10 @@ jobs:
             - Don't nitpick formatting if there's a linter
 
             ## Submit Review
-            After analysis, submit your review:
-            - `gh pr review ${{ github.event.pull_request.number }} --approve -b "summary"` — No blocking issues
-            - `gh pr review ${{ github.event.pull_request.number }} --request-changes -b "summary"` — Has "Must Fix" issues
-            - `gh pr review ${{ github.event.pull_request.number }} --comment -b "summary"` — Has suggestions but nothing blocking
+            Submit your review using the gh api command in step 3 above. The review MUST include:
+            - All inline comments bundled in the `comments` array
+            - A summary in the `body` field
+            - The appropriate `event`: "APPROVE", "REQUEST_CHANGES", or "COMMENT"
           claude_args: |
             --allowedTools "Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*),Read,Glob,Grep"
 
