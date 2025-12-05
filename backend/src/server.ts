@@ -459,8 +459,9 @@ app.post(
       }
 
       // Create an Email-like object for the analyzer
+      const uploadId = `upload_${crypto.randomUUID()}`;
       const statementDoc = new Email({
-        id: `upload_${Date.now()}`,
+        id: uploadId,
         subject: req.file.originalname,
         from: "PDF Upload",
         date: new Date().toISOString(),
@@ -505,7 +506,8 @@ app.post(
       // Store transactions in Firestore
       const batch = firestore.batch();
       for (const tx of allTransactions) {
-        const txId = `${tx.sourceEmailId}_${tx.date}_${tx.amount}`;
+        // Use UUID to avoid collisions when same date/amount appears multiple times
+        const txId = crypto.randomUUID();
         const txRef = firestore
           .collection("users")
           .doc(uid)
@@ -530,6 +532,7 @@ app.post(
       await batch.commit();
 
       // Auto-mark matched bills as paid (confidence >= 70%)
+      const autoMarkedBills: string[] = [];
       for (const match of matches) {
         if (match.confidence >= 70) {
           await firestore
@@ -541,9 +544,15 @@ app.post(
               status: "paid",
               paidDate: match.transactionDate,
               matchedTransactionId: `${match.transactionDate}_${match.transactionAmount}`,
+              autoMatched: true,
+              matchConfidence: match.confidence,
               updatedAt: Date.now(),
             });
+          autoMarkedBills.push(match.billId);
         }
+      }
+      if (autoMarkedBills.length > 0) {
+        console.log(`Auto-marked ${autoMarkedBills.length} bills as paid for user ${uid}:`, autoMarkedBills);
       }
 
       res.json({

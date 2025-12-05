@@ -228,6 +228,12 @@ function App() {
         }
       );
 
+      // Handle non-JSON responses (e.g., gateway errors)
+      const contentType = res.headers.get("content-type");
+      if (!contentType?.includes("application/json")) {
+        throw new Error(`Server error: ${res.status} ${res.statusText}`);
+      }
+
       const data = await res.json();
 
       if (!res.ok) {
