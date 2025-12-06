@@ -137,6 +137,7 @@ function App() {
     setAnalyzing(true);
     setNeedsReauth(false);
     const foundBills: Bill[] = [];
+    let receivedData = false; // Track if we got any data from the stream
 
     try {
       const eventSource = new EventSource(
@@ -145,6 +146,7 @@ function App() {
 
       // Listen for progress events
       eventSource.addEventListener("progress", (event: MessageEvent) => {
+        receivedData = true;
         const data = JSON.parse(event.data);
         const { stage, current, total } = data;
 
@@ -172,22 +174,28 @@ function App() {
 
       // Listen for bill events
       eventSource.addEventListener("bill", (event: MessageEvent) => {
+        receivedData = true;
         const bill: Bill = JSON.parse(event.data);
         foundBills.push(bill);
         setBills([...foundBills]); // Update bills in real-time
       });
 
-      eventSource.onerror = (error) => {
-        // EventSource fires onerror when stream ends naturally or on error
-        // If we received data successfully, this is likely a normal close
-        if (eventSource.readyState === EventSource.CLOSED) {
-          console.log("Analysis complete, stream closed");
+      eventSource.onerror = () => {
+        // EventSource fires onerror when stream ends - this is normal for SSE
+        // Only treat as error if we never received any data
+        if (receivedData) {
+          // Stream completed successfully
           setProgress({
             message: `✓ Complete! Found ${foundBills.length} bills`,
           });
           setTimeout(() => setProgress(null), 2000);
         } else {
-          console.error("EventSource error:", error);
+          // Connection failed before receiving data
+          console.error("Failed to connect to analysis stream");
+          setProgress({
+            message: "❌ Failed to connect. Please try again.",
+          });
+          setTimeout(() => setProgress(null), 3000);
         }
         eventSource.close();
         setAnalyzing(false);
